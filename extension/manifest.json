@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "THE SESSION TOOLS",
+  "version": "0.1.0",
+  "description": "The Sessionでの練習を少しだけ快適にする、非公式メトロノームです。",
+  "permissions": ["storage", "tabs", "windows"],
+  "host_permissions": ["https://thesession.org/*", "https://www.thesession.org/*"],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://thesession.org/*", "https://www.thesession.org/*"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "the-session-tools@example.invalid",
+      "strict_min_version": "109.0"
+    }
+  }
+}

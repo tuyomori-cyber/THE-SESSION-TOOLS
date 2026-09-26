@@ -1,12 +1,14 @@
 # Current State
 
-Updated: 1790384640
+Updated: 1790402558
 
 Now:
-- Done: MV3 Audio PoCの観測結果・採用判断・未解決事項を仕様書配下の新規文書へ整理した。
+- Done: root-todoへ、メトロノーム本実装、heartbeat、終了検出、10秒短縮試験、UX改善の進捗を反映した。
+- Pending: 本番5分での最終試験、複数タブ／複数ウィンドウ検証、README・公開準備。
 
 Next:
-- Firefox MV3の本実装を開始し、generation付き5分タイムアウトと状態同期を実装する。
+- 必要ならREADME整備と公開用パッケージ作成を行う。
+- ->
 
 Constraints:
 - Keep session.md short and optimized for Codex resumption.

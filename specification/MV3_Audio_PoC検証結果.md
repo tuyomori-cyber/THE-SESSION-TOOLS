@@ -84,6 +84,30 @@ autoResume             アクティブ復帰時に自動再開するか
 
 タイムアウトによる停止では `userWantsPlayback` を維持する。ユーザーの Stop ではこれを解除する。この区別により、復帰時の自動再開はユーザーの明示的な停止を覆さない。
 
+## MV3 background event page の短時間停止と heartbeat PoC
+
+background event page を音源ホストにした PoC では、The Session が表示されたままでも、再生開始からおよそ20〜30秒後にクリック音が止まる事象を観測した。これは5分の非アクティブタイムアウトではない。
+
+停止後に UI 操作で `getState` を送ると、新しい `background initialized` 状態が返った。したがって、`AudioContext` やスケジューラが停止したのではなく、Firefox MV3 がアイドルと判定した background event page を破棄し、音源を含むメモリ状態が失われたことが原因である。
+
+一方、content script 内の AudioContext PoC は、The Session の背景化・別アプリへの切替・Firefox最小化中も安定して動作した。そこで content script から background へ1秒ごとの無害な `heartbeat` メッセージを送る PoC を追加した。
+
+### heartbeat PoC 結果
+
+| 観測項目 | 結果 |
+| --- | --- |
+| heartbeat なし | 約20〜30秒後に background event page が破棄され、クリック音が停止した |
+| 1秒ごとの heartbeat あり | 3分超の連続再生を確認した（`ticks:404`、`AudioContext: running`） |
+| ユーザーStop | schedulerのみ停止し、`AudioContext` は running のまま。次回Playで再利用できた |
+
+### 採用する対策
+
+- background event page を音源ホストとして維持する。
+- The Session の各 content script は、存在している間だけ1秒ごとに `heartbeat` を background へ送る。
+- heartbeat は状態変更・UI再描画・ストレージ書き込みを行わず、event page を活動中に保つためだけに使う。
+- ページ遷移時は古い content script の heartbeat が破棄され、遷移先へ注入された新しい content script が直ちにheartbeatを開始する。
+- heartbeat の間隔は、今回確認された約20〜30秒の破棄より十分短い1秒とする。Firefoxの実装変更で持続性が変わる可能性があるため、受け入れ試験ではページ遷移・背景化・最小化を含む連続再生を確認する。
+
 ## 採用判断
 
 v0.1.0 は Firefox 専用の MV3 拡張として実装する。
@@ -94,6 +118,7 @@ v0.1.0 は Firefox 専用の MV3 拡張として実装する。
 - **保存**: `bpm` と `autoResume` は `storage.local` に保存する。再生希望はブラウザ再起動後に復元しない
 - **非アクティブ時**: 5分後に音のみ停止し、再生希望を維持する。復帰時に `autoResume` が有効なら自動再開する
 - **終了条件**: ユーザーの Stop、または最後の The Session タブを閉じたとき
+- **event page維持**: content script から1秒ごとのheartbeatを送る
 
 ## Chrome 対応について
 
