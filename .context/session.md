@@ -1,13 +1,12 @@
 # Current State
 
-Updated: 1790341407
+Updated: 1790384640
 
 Now:
-- Done: 実装責務、音声の保持方式、状態管理、終了条件、検証手順をroot-todoへ追加した。
-- Pending: Manifest V2のAMO配布可否と、Play操作からのAudioContext再開を実機で確認する。
+- Done: MV3 Audio PoCの観測結果・採用判断・未解決事項を仕様書配下の新規文書へ整理した。
 
 Next:
-- 配布要件を確認後、Firefox拡張の最小構成を作成する。
+- Firefox MV3の本実装を開始し、generation付き5分タイムアウトと状態同期を実装する。
 
 Constraints:
 - Keep session.md short and optimized for Codex resumption.
@@ -16,8 +15,8 @@ Constraints:
 Relevant:
 - context: THE-SESSION-TOOLS
 - repo: THE-SESSION-TOOLS
-- repo: specification
-- cwd: /home/tuyomori/project/THE-SESSION-TOOLS
-- file: .context/session.md
-- file: .context/turns.jsonl
+- repo: poc
+- repo: poc-firefox-background
+- repo: poc-firefox-background-timeout
+- repo: poc-inactivity
 

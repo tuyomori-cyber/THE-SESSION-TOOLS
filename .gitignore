@@ -4,3 +4,5 @@
 !/.context/root-todo.md
 !/.context/root-todo-v0.4-backnumber.md
 target/
+*.xpi
+poc*
