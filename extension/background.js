@@ -288,8 +288,5 @@ browser.tabs.onRemoved.addListener((tabId) => {
   }).catch(console.error);
 });
 browser.windows.onFocusChanged.addListener(() => { refreshSessionActivity().catch(console.error); });
-if (browser.windows.onBoundsChanged) {
-  browser.windows.onBoundsChanged.addListener(() => { refreshSessionActivity().catch(console.error); });
-}
 
 initialize().then(() => refreshSessionActivity()).catch(console.error);

@@ -1,14 +1,12 @@
 # Current State
 
-Updated: 1790402558
+Updated: 1791710692
 
 Now:
-- Done: root-todoへ、メトロノーム本実装、heartbeat、終了検出、10秒短縮試験、UX改善の進捗を反映した。
-- Pending: 本番5分での最終試験、複数タブ／複数ウィンドウ検証、README・公開準備。
+- Pending: data_collection_permissionsに合わせ、最小対応版をDesktop 140／Android 142へ上げるか判断する。
 
 Next:
-- 必要ならREADME整備と公開用パッケージ作成を行う。
-- ->
+- 配布対象をデスクトップ限定にするか確認後、manifest.jsonの最小対応版を更新する。
 
 Constraints:
 - Keep session.md short and optimized for Codex resumption.
