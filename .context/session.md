@@ -1,12 +1,12 @@
 # Current State
 
-Updated: 1791710692
+Updated: 1791712000
 
 Now:
-- Pending: data_collection_permissionsに合わせ、最小対応版をDesktop 140／Android 142へ上げるか判断する。
+- Done: v0.1.1のREADME・CHANGELOG・manifest版数・配布ZIPを作成し、最後のThe Sessionタブ終了時の停止修正を含めた。
 
 Next:
-- 配布対象をデスクトップ限定にするか確認後、manifest.jsonの最小対応版を更新する。
+- AMOへthe-session-tools-0.1.1.zipをアップロードして署名し、署名済みXPIで最終動作確認を行う。
 
 Constraints:
 - Keep session.md short and optimized for Codex resumption.

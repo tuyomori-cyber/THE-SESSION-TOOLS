@@ -142,5 +142,4 @@ const heartbeatId = window.setInterval(() => {
 window.addEventListener("pagehide", () => {
   clearTempoRepeat();
   window.clearInterval(heartbeatId);
-  browser.runtime.sendMessage({ type: "sessionPageGone" }).catch(() => undefined);
 }, { once: true });

@@ -225,9 +225,18 @@ function isSessionUrl(url = "") {
   }
 }
 
-async function getSessionTabs() {
+async function getSessionTabs({ excludingTabId } = {}) {
   const tabs = await browser.tabs.query({});
-  return tabs.filter((tab) => isSessionUrl(tab.url));
+  return tabs.filter((tab) => tab.id !== excludingTabId && isSessionUrl(tab.url));
+}
+
+async function refreshOrStopForSessionTabs(closingTabId) {
+  const tabs = await getSessionTabs({ excludingTabId: closingTabId });
+  if (tabs.length === 0) {
+    await stopAudio({ clearIntent: true });
+  } else {
+    await refreshSessionActivity();
+  }
 }
 
 browser.runtime.onMessage.addListener(async (message, sender) => {
@@ -261,15 +270,6 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
     case "heartbeat":
       // Content-script heartbeats keep this Firefox MV3 event page alive.
       return undefined;
-    case "sessionPageGone":
-      // pagehide fires before the closing tab disappears from tabs.query().
-      setTimeout(() => {
-        getSessionTabs().then(async (tabs) => {
-          if (tabs.length === 0) await stopAudio({ clearIntent: true });
-          else await refreshSessionActivity();
-        }).catch(console.error);
-      }, 100);
-      return undefined;
     default:
       return undefined;
   }
@@ -278,14 +278,16 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
 browser.tabs.onActivated.addListener(() => { refreshSessionActivity().catch(console.error); });
 browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status === "loading") visibilityByTabId.delete(tabId);
-  refreshSessionActivity().catch(console.error);
+  refreshOrStopForSessionTabs().catch(console.error);
 });
 browser.tabs.onRemoved.addListener((tabId) => {
   visibilityByTabId.delete(tabId);
-  getSessionTabs().then(async (tabs) => {
-    if (tabs.length === 0) await stopAudio({ clearIntent: true });
-    else await refreshSessionActivity();
-  }).catch(console.error);
+  // Exclude the closing ID even if tabs.query() briefly still returns it.
+  refreshOrStopForSessionTabs(tabId).catch(console.error);
+});
+browser.windows.onRemoved.addListener(() => {
+  // Covers the last tab disappearing as part of closing an entire window.
+  refreshOrStopForSessionTabs().catch(console.error);
 });
 browser.windows.onFocusChanged.addListener(() => { refreshSessionActivity().catch(console.error); });
 
