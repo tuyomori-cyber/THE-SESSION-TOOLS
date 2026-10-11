@@ -8,12 +8,15 @@ const SCHEDULER_INTERVAL_MS = 25;
 const SCHEDULE_AHEAD_SECONDS = 0.2;
 const DEFAULT_VOLUME = 0.7;
 const MAX_VOLUME = 1.5;
+const MIN_GAIN = 0.0001;
 const DEFAULT_SUBDIVISION = 1;
 const SUBDIVISIONS = [1, 2, 3, 4];
 const SOUND_PRESETS = {
-  beep: { type: "sine", frequency: 1000, duration: 0.05, level: 0.4 },
-  wood: { type: "triangle", frequency: 360, duration: 0.085, level: 0.55 },
-  sharp: { type: "square", frequency: 1600, duration: 0.035, level: 0.24 }
+  // `level` is deliberately capped so a 150% accented click remains below 1.0.
+  // The short hold makes the peak easier to hear than an immediate full decay.
+  wood: { type: "triangle", frequency: 720, duration: 0.075, hold: 0.013, level: 0.32 },
+  sharp: { type: "square", frequency: 1800, duration: 0.045, hold: 0.008, level: 0.20 },
+  crisp: { type: "square", frequency: 1200, duration: 0.06, hold: 0.014, level: 0.24 }
 };
 
 const state = {
@@ -22,7 +25,7 @@ const state = {
   audioActuallyPlaying: false,
   autoResume: true,
   volume: DEFAULT_VOLUME,
-  sound: "beep",
+  sound: "crisp",
   subdivision: DEFAULT_SUBDIVISION
 };
 
@@ -44,7 +47,7 @@ function publicState() {
 async function initialize() {
   if (initialized) return;
   if (!initializePromise) {
-    initializePromise = browser.storage.local.get({ bpm: DEFAULT_BPM, autoResume: true, volume: DEFAULT_VOLUME, sound: "beep", subdivision: DEFAULT_SUBDIVISION })
+    initializePromise = browser.storage.local.get({ bpm: DEFAULT_BPM, autoResume: true, volume: DEFAULT_VOLUME, sound: "crisp", subdivision: DEFAULT_SUBDIVISION })
       .then((saved) => {
         state.bpm = clampBpm(saved.bpm);
         state.autoResume = Boolean(saved.autoResume);
@@ -70,7 +73,7 @@ function clampVolume(value) {
 }
 
 function sanitizeSound(value) {
-  return Object.hasOwn(SOUND_PRESETS, value) ? value : "beep";
+  return Object.hasOwn(SOUND_PRESETS, value) ? value : "crisp";
 }
 
 function sanitizeSubdivision(value) {
@@ -87,14 +90,17 @@ function ensureAudioContext() {
 
 function scheduleClick(when, accent) {
   const preset = SOUND_PRESETS[state.sound];
-  const oscillator = audioContext.createOscillator();
   const gain = audioContext.createGain();
+  const oscillator = audioContext.createOscillator();
+  const attack = preset.attack ?? 0.002;
   oscillator.type = preset.type;
   oscillator.frequency.setValueAtTime(preset.frequency * (accent ? 1.2 : 1), when);
-  const peak = Math.max(0.0001, preset.level * state.volume * (accent ? 1.25 : 1));
-  gain.gain.setValueAtTime(0.0001, when);
-  gain.gain.exponentialRampToValueAtTime(peak, when + 0.002);
-  gain.gain.exponentialRampToValueAtTime(0.0001, when + preset.duration);
+  const peak = Math.max(MIN_GAIN, preset.level * state.volume * (accent ? 1.25 : 1));
+  const holdUntil = when + attack + preset.hold;
+  gain.gain.setValueAtTime(MIN_GAIN, when);
+  gain.gain.exponentialRampToValueAtTime(peak, when + attack);
+  gain.gain.setValueAtTime(peak, holdUntil);
+  gain.gain.exponentialRampToValueAtTime(MIN_GAIN, when + preset.duration);
   oscillator.connect(gain).connect(audioContext.destination);
   oscillator.start(when);
   oscillator.stop(when + preset.duration + 0.01);

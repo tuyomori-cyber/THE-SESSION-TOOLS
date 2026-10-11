@@ -22,9 +22,9 @@ root.innerHTML = `
   </label>
   <label class="tst-setting">Sound
     <select data-sound aria-label="クリック音">
-      <option value="beep">Beep</option>
-      <option value="wood">Wood</option>
+      <option value="crisp">Crisp</option>
       <option value="sharp">Sharp</option>
+      <option value="wood">Wood</option>
     </select>
   </label>
   <label class="tst-setting tst-volume">Volume <output data-volume>70%</output>

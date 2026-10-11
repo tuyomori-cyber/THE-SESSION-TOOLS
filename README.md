@@ -12,7 +12,7 @@ The Session（[thesession.org](https://thesession.org/)）上で、譜面を見�
   - ボタンを長押しすると加速して連続調整
   - スライダーで直接調整
 - 分割を Beat、8分音符、16分音符、3連符から選ぶ
-- Beep、Wood、Sharp の3種類からクリック音を選ぶ
+- Crisp、Sharp、Wood の3種類からクリック音を選ぶ（初期値は Crisp）
 - 音量を 0〜150% の範囲で設定する
 - 各拍の先頭を少し強く鳴らす
 - The Session 内でページ遷移しても再生を継続する
@@ -21,6 +21,8 @@ The Session（[thesession.org](https://thesession.org/)）上で、譜面を見�
 - 最後の The Session タブを閉じたとき、または最後のタブが The Session 以外へ遷移したときに停止する
 
 再生状態はブラウザ再起動後には復元しません。
+
+v0.1.1以前で保存された Beep または Click の音色設定は、v0.1.2 では Crisp に自動的に切り替わります。
 
 ## 動作要件
 
@@ -52,10 +54,10 @@ The Session の別ページへ移動しても、設定と再生状態は引き�
 
 ```bash
 cd extension
-zip -r ../the-session-tools-0.1.1.zip .
+zip -r ../the-session-tools-0.1.2.zip .
 ```
 
-作成した ZIP は、ディレクトリそのものではなく、直下に `manifest.json` がある構造でなければなりません。AMO Developer Hub へアップロードし、非公開配布なら **On your own (Unlisted)** を選択して署名済み XPI を取得します。
+作成した ZIP は、ディレクトリそのものではなく、直下に `manifest.json` がある構造でなければなりません。リリース用の `the-session-tools-0.1.2.zip` はこの構造で生成・静的検証済みです。AMO Developer Hub へアップロードし、非公開配布なら **On your own (Unlisted)** を選択して署名済み XPI を取得します。
 
 ## 構成
 

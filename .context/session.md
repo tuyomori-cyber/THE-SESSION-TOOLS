@@ -1,12 +1,12 @@
 # Current State
 
-Updated: 1791712000
+Updated: 1791715283
 
 Now:
-- Done: v0.1.1のREADME・CHANGELOG・manifest版数・配布ZIPを作成し、最後のThe Sessionタブ終了時の停止修正を含めた。
+- Done: v0.1.2 のREADME・CHANGELOG・ToDo・リリースZIPを最終3音色構成に更新し、静的検証した。
 
 Next:
-- AMOへthe-session-tools-0.1.1.zipをアップロードして署名し、署名済みXPIで最終動作確認を行う。
+- Crisp・Sharp・Woodを実演奏中に最終試聴し、問題なければv0.1.2をAMOへ提出する。
 
 Constraints:
 - Keep session.md short and optimized for Codex resumption.
