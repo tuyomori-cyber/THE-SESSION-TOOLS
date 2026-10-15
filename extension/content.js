@@ -3,7 +3,7 @@
 const root = document.createElement("section");
 root.id = "the-session-tools-metronome";
 root.innerHTML = `
-  <div class="tst-title"><span aria-hidden="true">♩</span> Metronome</div>
+  <div class="tst-title" role="button" tabindex="0" aria-expanded="true" aria-label="Metronomeを最小化"><span aria-hidden="true">♩</span> Metronome <span class="tst-title-arrow" aria-hidden="true">▴</span></div>
   <div class="tst-tempo">
     <button type="button" data-action="decrease" aria-label="BPMを減らす">−</button>
     <output aria-live="polite"><strong data-bpm>110</strong> BPM</output>
@@ -46,7 +46,95 @@ const subdivisionControl = root.querySelector("[data-subdivision]");
 const soundControl = root.querySelector("[data-sound]");
 const volumeControl = root.querySelector("[data-volume-input]");
 const volumeOutput = root.querySelector("[data-volume]");
+const dragHandle = root.querySelector(".tst-title");
 let tempoRepeatId;
+let dragState;
+let savedPosition;
+let positionTouched = false;
+let collapsedTouched = false;
+
+function placePanel(left, top) {
+  const maxLeft = Math.max(0, window.innerWidth - root.offsetWidth);
+  const maxTop = Math.max(0, window.innerHeight - root.offsetHeight);
+  const position = {
+    left: Math.min(Math.max(0, left), maxLeft),
+    top: Math.min(Math.max(0, top), maxTop),
+  };
+  root.style.right = "auto";
+  root.style.bottom = "auto";
+  root.style.left = `${position.left}px`;
+  root.style.top = `${position.top}px`;
+  return position;
+}
+
+function setCollapsed(collapsed) {
+  root.dataset.collapsed = String(collapsed);
+  dragHandle.setAttribute("aria-expanded", String(!collapsed));
+  dragHandle.setAttribute("aria-label", collapsed ? "Metronomeを展開" : "Metronomeを最小化");
+  if (savedPosition) placePanel(savedPosition.left, savedPosition.top);
+}
+
+function toggleCollapsed() {
+  collapsedTouched = true;
+  const collapsed = root.dataset.collapsed !== "true";
+  setCollapsed(collapsed);
+  browser.storage.local.set({ metronomeCollapsed: collapsed }).catch(console.error);
+}
+
+dragHandle.addEventListener("pointerdown", (event) => {
+  if (event.button !== 0 || !event.isPrimary) return;
+  const rect = root.getBoundingClientRect();
+  dragState = {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    offsetX: event.clientX - rect.left,
+    offsetY: event.clientY - rect.top,
+    moved: false,
+  };
+  dragHandle.setPointerCapture(event.pointerId);
+  event.preventDefault();
+});
+
+dragHandle.addEventListener("pointermove", (event) => {
+  if (!dragState || event.pointerId !== dragState.pointerId) return;
+  if (!dragState.moved && Math.hypot(event.clientX - dragState.startX, event.clientY - dragState.startY) < 6) return;
+  dragState.moved = true;
+  positionTouched = true;
+  savedPosition = placePanel(event.clientX - dragState.offsetX, event.clientY - dragState.offsetY);
+});
+
+dragHandle.addEventListener("pointerup", (event) => {
+  if (!dragState || event.pointerId !== dragState.pointerId) return;
+  if (dragState.moved) {
+    browser.storage.local.set({ metronomePosition: savedPosition }).catch(console.error);
+  } else {
+    toggleCollapsed();
+  }
+  dragState = undefined;
+  dragHandle.releasePointerCapture(event.pointerId);
+});
+
+dragHandle.addEventListener("pointercancel", () => { dragState = undefined; });
+dragHandle.addEventListener("lostpointercapture", () => { dragState = undefined; });
+dragHandle.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  toggleCollapsed();
+});
+
+window.addEventListener("resize", () => {
+  if (savedPosition) placePanel(savedPosition.left, savedPosition.top);
+});
+
+browser.storage.local.get(["metronomePosition", "metronomeCollapsed"]).then((settings) => {
+  if (!collapsedTouched) setCollapsed(settings.metronomeCollapsed === true);
+  const position = settings.metronomePosition;
+  if (!positionTouched && Number.isFinite(position?.left) && Number.isFinite(position?.top)) {
+    savedPosition = position;
+    placePanel(position.left, position.top);
+  }
+}).catch(console.error);
 
 function render(state) {
   bpmOutput.textContent = state.bpm;

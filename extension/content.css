@@ -16,7 +16,24 @@
   line-height: 1.3;
 }
 
-#the-session-tools-metronome .tst-title { font-weight: 700; margin-bottom: 10px; }
+#the-session-tools-metronome .tst-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 36px;
+  margin-bottom: 10px;
+  font-weight: 700;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+#the-session-tools-metronome .tst-title:active { cursor: grabbing; }
+#the-session-tools-metronome .tst-title:focus-visible { outline: 2px solid #5c8a4e; outline-offset: 2px; }
+#the-session-tools-metronome .tst-title-arrow { margin-left: auto; }
+#the-session-tools-metronome[data-collapsed="true"] { width: max-content; }
+#the-session-tools-metronome[data-collapsed="true"] .tst-title { margin-bottom: 0; }
+#the-session-tools-metronome[data-collapsed="true"] .tst-title-arrow { transform: rotate(180deg); }
+#the-session-tools-metronome[data-collapsed="true"] > :not(.tst-title) { display: none; }
 #the-session-tools-metronome .tst-tempo,
 #the-session-tools-metronome .tst-controls { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 #the-session-tools-metronome .tst-tempo output { min-width: 88px; text-align: center; }

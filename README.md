@@ -34,7 +34,7 @@ v0.1.1以前で保存された Beep または Click の音色設定は、v0.1.2 
 ## 使い方
 
 1. The Session の任意のページを開きます。
-2. 右下の **Metronome** で BPM、Division、Sound、Volume を調整します。
+2. 右下の **Metronome** で BPM、Division、Sound、Volume を調整します。見出しをタップすると最小化・展開でき、見出しをドラッグすると最小化中も位置を移動できます。位置と最小化状態は保存されます。
 3. **Play** を押して開始し、**Stop** で停止します。
 
 The Session の別ページへ移動しても、設定と再生状態は引き継がれます。
