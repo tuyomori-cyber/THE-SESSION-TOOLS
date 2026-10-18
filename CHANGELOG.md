@@ -2,7 +2,7 @@
 
 このプロジェクトでは、[Semantic Versioning](https://semver.org/lang/ja/) に従います。
 
-## [Unreleased]
+## [0.1.3]
 
 ### Changed
 
