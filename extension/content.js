@@ -3,7 +3,10 @@
 const root = document.createElement("section");
 root.id = "the-session-tools-metronome";
 root.innerHTML = `
-  <div class="tst-title" role="button" tabindex="0" aria-expanded="true" aria-label="Metronomeを最小化"><span aria-hidden="true">♩</span> Metronome <span class="tst-title-arrow" aria-hidden="true">▴</span></div>
+  <div class="tst-title">
+    <span class="tst-drag-handle"><span aria-hidden="true">♩</span> Metronome</span>
+    <button type="button" class="tst-title-arrow" aria-expanded="true" aria-label="Metronomeを最小化"><svg viewBox="0 0 32 32" width="32" height="32" aria-hidden="true" focusable="false"><path d="M4 24 L16 0 L28 24 Z" fill="currentColor"/></svg></button>
+  </div>
   <div class="tst-tempo">
     <button type="button" data-action="decrease" aria-label="BPMを減らす">−</button>
     <output aria-live="polite"><strong data-bpm>110</strong> BPM</output>
@@ -46,7 +49,8 @@ const subdivisionControl = root.querySelector("[data-subdivision]");
 const soundControl = root.querySelector("[data-sound]");
 const volumeControl = root.querySelector("[data-volume-input]");
 const volumeOutput = root.querySelector("[data-volume]");
-const dragHandle = root.querySelector(".tst-title");
+const dragHandle = root.querySelector(".tst-drag-handle");
+const collapseButton = root.querySelector(".tst-title-arrow");
 let tempoRepeatId;
 let dragState;
 let savedPosition;
@@ -69,8 +73,8 @@ function placePanel(left, top) {
 
 function setCollapsed(collapsed) {
   root.dataset.collapsed = String(collapsed);
-  dragHandle.setAttribute("aria-expanded", String(!collapsed));
-  dragHandle.setAttribute("aria-label", collapsed ? "Metronomeを展開" : "Metronomeを最小化");
+  collapseButton.setAttribute("aria-expanded", String(!collapsed));
+  collapseButton.setAttribute("aria-label", collapsed ? "Metronomeを展開" : "Metronomeを最小化");
   if (savedPosition) placePanel(savedPosition.left, savedPosition.top);
 }
 
@@ -108,8 +112,6 @@ dragHandle.addEventListener("pointerup", (event) => {
   if (!dragState || event.pointerId !== dragState.pointerId) return;
   if (dragState.moved) {
     browser.storage.local.set({ metronomePosition: savedPosition }).catch(console.error);
-  } else {
-    toggleCollapsed();
   }
   dragState = undefined;
   dragHandle.releasePointerCapture(event.pointerId);
@@ -117,11 +119,7 @@ dragHandle.addEventListener("pointerup", (event) => {
 
 dragHandle.addEventListener("pointercancel", () => { dragState = undefined; });
 dragHandle.addEventListener("lostpointercapture", () => { dragState = undefined; });
-dragHandle.addEventListener("keydown", (event) => {
-  if (event.key !== "Enter" && event.key !== " ") return;
-  event.preventDefault();
-  toggleCollapsed();
-});
+collapseButton.addEventListener("click", toggleCollapsed);
 
 window.addEventListener("resize", () => {
   if (savedPosition) placePanel(savedPosition.left, savedPosition.top);

@@ -23,16 +23,40 @@
   min-height: 36px;
   margin-bottom: 10px;
   font-weight: 700;
+}
+#the-session-tools-metronome .tst-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 44px;
   cursor: grab;
   touch-action: none;
   user-select: none;
 }
-#the-session-tools-metronome .tst-title:active { cursor: grabbing; }
-#the-session-tools-metronome .tst-title:focus-visible { outline: 2px solid #5c8a4e; outline-offset: 2px; }
-#the-session-tools-metronome .tst-title-arrow { margin-left: auto; }
+#the-session-tools-metronome .tst-drag-handle:active { cursor: grabbing; }
+#the-session-tools-metronome button.tst-title-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  box-sizing: border-box;
+  margin-left: auto;
+  padding: 0;
+  font-size: 32px;
+  line-height: 1;
+  touch-action: manipulation;
+}
+#the-session-tools-metronome .tst-title-arrow svg {
+  display: block;
+  flex: none;
+  transform-origin: center;
+}
+#the-session-tools-metronome .tst-title-arrow:focus-visible { outline: 2px solid #5c8a4e; outline-offset: 2px; }
 #the-session-tools-metronome[data-collapsed="true"] { width: max-content; }
 #the-session-tools-metronome[data-collapsed="true"] .tst-title { margin-bottom: 0; }
-#the-session-tools-metronome[data-collapsed="true"] .tst-title-arrow { transform: rotate(180deg); }
+#the-session-tools-metronome[data-collapsed="true"] .tst-title-arrow svg { transform: rotate(180deg); }
 #the-session-tools-metronome[data-collapsed="true"] > :not(.tst-title) { display: none; }
 #the-session-tools-metronome .tst-tempo,
 #the-session-tools-metronome .tst-controls { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
