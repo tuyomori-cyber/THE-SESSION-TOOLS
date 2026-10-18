@@ -4,7 +4,7 @@ The Session（[thesession.org](https://thesession.org/)）上で、譜面を見�
 
 非公式の拡張機能であり、The Session とは関係ありません。
 
-このREADMEは作業ツリーの実装を説明します。今回のドラッグ・最小化操作の改善は未リリースです。既存の v0.1.2 ZIP には含まれないため、確認には下記の「開発時の導入」を使用してください。
+このREADMEはv0.1.3の実装を説明します。ドラッグ・最小化操作の改善はv0.1.3に含まれます。
 
 ## 機能
 
@@ -59,10 +59,10 @@ The Session の別ページへ移動しても、設定と再生状態は引き�
 
 ```bash
 cd extension
-zip -r ../the-session-tools-0.1.2.zip .
+zip ../the-session-tools-0.1.3.zip manifest.json background.js content.js content.css
 ```
 
-作成した ZIP は、ディレクトリそのものではなく、直下に `manifest.json` がある構造でなければなりません。リリース用の `the-session-tools-0.1.2.zip` はこの構造で生成・静的検証済みです。AMO Developer Hub へアップロードし、非公開配布なら **On your own (Unlisted)** を選択して署名済み XPI を取得します。
+作成した ZIP は、ディレクトリそのものではなく、直下に `manifest.json` がある構造でなければなりません。リリース用の `the-session-tools-0.1.3.zip` はこの構造で生成・静的検証済みです。AMO Developer Hub へアップロードし、非公開配布なら **On your own (Unlisted)** を選択して署名済み XPI を取得します。
 
 ## 構成
 
