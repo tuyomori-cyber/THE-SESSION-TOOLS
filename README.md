@@ -4,7 +4,7 @@ The Session（[thesession.org](https://thesession.org/)）上で、譜面を見�
 
 非公式の拡張機能であり、The Session とは関係ありません。
 
-このREADMEはv0.1.3の実装を説明します。ドラッグ・最小化操作の改善はv0.1.3に含まれます。
+このREADMEはv0.1.3の実装を説明します。実装の正本は[現行仕様 v0.2](specification/THE%20SESSION%20TOOLS_仕様書v0.2.md)、保留事項は[TODO](TODO.md)です。ドラッグ・最小化操作の改善はv0.1.3に含まれます。
 
 ## 機能
 
@@ -83,4 +83,4 @@ zip ../the-session-tools-0.1.3.zip manifest.json background.js content.js conten
 
 [CHANGELOG.md](CHANGELOG.md) を参照してください。
 
-初期設計と現在の実装との差分は[仕様書の冒頭とUI操作の補足](specification/THE%20SESSION%20TOOLS_仕様書v0.1.0.md)に記載しています。[音響改善メモ](specification/v0.1.2修正方針.md)と[MV3 Audio PoC検証結果](specification/MV3_Audio_PoC検証結果.md)は、当時の検討・検証記録です。
+初期設計、音響改善、MV3 Audio PoCの記録は[old/specification/](old/specification/)に保管しています。

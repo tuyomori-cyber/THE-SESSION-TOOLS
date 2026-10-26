@@ -1,12 +1,13 @@
 # Current State
 
-Updated: 1791715283
+Updated: 1792999000
 
 Now:
-- Done: v0.1.2 のREADME・CHANGELOG・ToDo・リリースZIPを最終3音色構成に更新し、静的検証した。
+- Done: 旧仕様・検討・PoC記録をoldへ履歴化し、v0.1.3実装ベースの現行仕様v0.2を整備した。
+- Done: JavaScript構文、manifest JSON、配布ZIPの4ファイル構成を確認した。
 
 Next:
-- Crisp・Sharp・Woodを実演奏中に最終試聴し、問題なければv0.1.2をAMOへ提出する。
+- Surfaceでのタッチ・音声ライフサイクル実機確認、3音色の試聴、AMO検証を実施する。
 
 Constraints:
 - Keep session.md short and optimized for Codex resumption.
