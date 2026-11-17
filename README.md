@@ -42,6 +42,21 @@ v0.1.1以前で保存された Beep または Click の音色設定は、v0.1.2 
 
 The Session の別ページへ移動しても、設定と再生状態は引き継がれます。
 
+## 音声操作
+
+The Sessionを開いている間は、音声状態LEDが緑の「FOXを待機中」になります。`FOX`の後、3秒以内に次のコマンドを発話できます。音色は演奏中に変更しない方針のため、音声操作の対象外です。
+
+| 発話 | 動作 |
+| --- | --- |
+| 再生 / 停止 | メトロノームの開始 / 停止 |
+| BPM百五十 / テンポ二百 / BPM 120 | BPMを個別設定（30〜300） |
+| テンポ少し上げて / 下げて | BPMを+5 / -5 |
+| 音量百％ / 零％ / 百五十％ | 音量を個別設定（0〜150%） |
+| 音量少し上げて / 下げて | 音量を+10% / -10% |
+| 分割ビート / 八分 / 三連符（三連単）/ 十六分（十六部） | Divisionを設定 |
+
+LEDは灰＝未接続、青灰＝接続済み、緑＝待機、橙＝検出、点滅青＝認識中、赤＝障害です。
+
 三角ボタンは枠を含めて44×44pxの操作領域です。32×32pxのSVG領域内に三角を描き、上下どちらの向きでも三角の重心が枠の中心と一致するよう配置しています。Enter・Spaceでも、フォーカスした三角ボタンを操作できます。パネルの最小化だけでは再生は停止しません。
 
 ## 開発時の導入
@@ -52,6 +67,32 @@ The Session の別ページへ移動しても、設定と再生状態は引き�
 4. The Session を開き、右下にUIが表示されることを確認します。
 
 ソースを変更した後は、`about:debugging` の **再読み込み** を実行してください。
+
+### 音声操作を有効にする
+
+音声操作には[foxbook-speech](https://github.com/tuyomori-cyber/foxbook-speech)が必要です。THE SESSION TOOLSだけを一時読み込みしても、LEDは「未接続」のままで音声操作は有効になりません。
+
+1. `foxbook-speech`を取得し、THE SESSION TOOLSと同じ親ディレクトリへ置きます。Whisper.cpp、ReazonSpeechモデル、`arecord`、`ffmpeg`も必要です。すべてを含むセットアップ手順は[foxbook-speech README](https://github.com/tuyomori-cyber/foxbook-speech#%E5%88%9D%E5%9B%9E%E5%B0%8E%E5%85%A5)を参照してください。
+2. `foxbook-speech`で英語KWSモデルを`models/kws/`へ配置し、ネイティブ検出器とNative Hostを登録します。
+
+   ```bash
+   cd ../foxbook-speech
+   make -C native native-kws
+   python3 scripts/install_host.py
+   python3 scripts/install_service.py --enable
+   ```
+
+3. THE SESSION TOOLSをFirefoxへ一時読み込みまたは再読み込みし、The Sessionを開きます。LEDが緑の「FOXを待機中」になれば利用できます。
+
+`foxbook-speech`を更新した場合は、Native Host定義とserviceも反映します。
+
+```bash
+cd ../foxbook-speech
+python3 scripts/install_host.py
+systemctl --user restart foxbook-speech
+```
+
+モデル配置・依存関係・トラブルシューティングの正本は[foxbook-speech README](../foxbook-speech/README.md)です。
 
 ## 署名・配布用パッケージ
 

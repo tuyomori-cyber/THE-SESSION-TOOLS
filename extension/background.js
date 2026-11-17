@@ -26,8 +26,87 @@ const state = {
   autoResume: true,
   volume: DEFAULT_VOLUME,
   sound: "crisp",
-  subdivision: DEFAULT_SUBDIVISION
+  subdivision: DEFAULT_SUBDIVISION,
+  voiceStatus: "unavailable"
 };
+
+let speechPort;
+let voiceRecordingId;
+let voiceStopTimer;
+
+function connectSpeech() {
+  if (speechPort) return;
+  try {
+    speechPort = browser.runtime.connectNative("foxbook_speech");
+    speechPort.onMessage.addListener((message) => {
+      if (message?.version !== 1 || typeof message.event !== "string") return;
+      if (message.event === "status") {
+        speechPort.postMessage({ version: 1, action: "prepare_microphone" });
+      } else if (message.event === "microphone_prepared") {
+        speechPort.postMessage({ version: 1, action: "prepare_engine", engine: "reazonspeech_k2" });
+      } else if (message.event === "engine_prepared") {
+        speechPort.postMessage({ version: 1, action: "start_wakeword" });
+      } else if (message.event === "wakeword_waiting") {
+        state.voiceStatus = "waiting";
+        broadcastState().catch(console.error);
+      } else if (message.event === "wakeword_detected") {
+        state.voiceStatus = "listening";
+        broadcastState().catch(console.error);
+        speechPort.postMessage({ version: 1, action: "start_recording" });
+      } else if (message.event === "started") {
+        voiceRecordingId = message.recordingId;
+        voiceStopTimer = setTimeout(() => {
+          if (voiceRecordingId) speechPort?.postMessage({ version: 1, action: "stop_recording", recordingId: voiceRecordingId });
+        }, 3000);
+      } else if (message.event === "result") {
+        if (voiceStopTimer) clearTimeout(voiceStopTimer);
+        voiceRecordingId = undefined;
+        const command = String(message.text ?? "").replaceAll(/\s/g, "");
+        if (command === "再生") {
+          state.userWantsPlayback = true;
+          startAudio().catch(console.error);
+        } else if (command === "停止") {
+          stopAudio({ clearIntent: true }).catch(console.error);
+        } else if (command === "テンポ少し上げて") {
+          adjustBpm(5).catch(console.error);
+        } else if (command === "テンポ少し下げて") {
+          adjustBpm(-5).catch(console.error);
+        } else if (command === "音量少し上げて") {
+          setVolume(state.volume + 0.1).catch(console.error);
+        } else if (command === "音量少し下げて") {
+          setVolume(state.volume - 0.1).catch(console.error);
+        } else {
+          const divisions = {
+            "分割ビート": 1,
+            "分割八分": 2,
+            "分割三連符": 3,
+            "分割三連単": 3,
+            "分割十六分": 4,
+            "分割十六部": 4
+          };
+          const bpm = parseVoiceBpm(command);
+          const volume = parseVoiceVolume(command);
+          if (Object.hasOwn(divisions, command)) setSubdivision(divisions[command]).catch(console.error);
+          else if (bpm !== undefined) setBpm(bpm).catch(console.error);
+          else if (volume !== undefined) setVolume(volume / 100).catch(console.error);
+        }
+        speechPort.postMessage({ version: 1, action: "start_wakeword" });
+      } else if (message.event === "error") {
+        state.voiceStatus = "error";
+        broadcastState().catch(console.error);
+      }
+    });
+    speechPort.onDisconnect.addListener(() => {
+      speechPort = undefined;
+      state.voiceStatus = "error";
+      broadcastState().catch(console.error);
+    });
+    speechPort.postMessage({ version: 1, action: "get_status" });
+  } catch (_) {
+    state.voiceStatus = "error";
+    broadcastState().catch(console.error);
+  }
+}
 
 let initialized = false;
 let initializePromise;
@@ -79,6 +158,43 @@ function sanitizeSound(value) {
 function sanitizeSubdivision(value) {
   const subdivision = Number(value);
   return SUBDIVISIONS.includes(subdivision) ? subdivision : DEFAULT_SUBDIVISION;
+}
+
+function parseVoiceBpm(text) {
+  const digits = { "〇": 0, "零": 0, "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9 };
+  const match = String(text ?? "").toLowerCase().replaceAll(/\s/g, "").match(/(?:bpm|テンポ)([0-9〇零一二三四五六七八九十百]+)/u);
+  if (!match) return undefined;
+  const value = match[1];
+  let bpm;
+  if (/^[0-9]+$/.test(value)) bpm = Number(value);
+  else if (![...value].some((character) => character === "十" || character === "百")) bpm = Number([...value].map((character) => digits[character]).join(""));
+  else {
+    let total = 0;
+    let digit;
+    for (const character of value) {
+      if (Object.hasOwn(digits, character)) digit = digits[character];
+      else { total += (digit ?? 1) * (character === "十" ? 10 : 100); digit = undefined; }
+    }
+    bpm = total + (digit ?? 0);
+  }
+  return Number.isInteger(bpm) && bpm >= MIN_BPM && bpm <= MAX_BPM ? bpm : undefined;
+}
+
+function parseVoiceVolume(text) {
+  const match = String(text ?? "").replaceAll(/\s/g, "").match(/^音量([0-9〇零一二三四五六七八九十百]+)(?:％|%)?$/u);
+  if (!match) return undefined;
+  const digits = { "〇": 0, "零": 0, "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9 };
+  const value = match[1];
+  let number = /^[0-9]+$/.test(value) ? Number(value) : 0;
+  if (!/^[0-9]+$/.test(value)) {
+    let digit;
+    for (const character of value) {
+      if (Object.hasOwn(digits, character)) digit = digits[character];
+      else { number += (digit ?? 1) * (character === "十" ? 10 : 100); digit = undefined; }
+    }
+    number += digit ?? 0;
+  }
+  return Number.isInteger(number) && number >= 0 && number <= 150 ? number : undefined;
 }
 
 function ensureAudioContext() {
@@ -297,4 +413,7 @@ browser.windows.onRemoved.addListener(() => {
 });
 browser.windows.onFocusChanged.addListener(() => { refreshSessionActivity().catch(console.error); });
 
-initialize().then(() => refreshSessionActivity()).catch(console.error);
+initialize().then(async () => {
+  await refreshSessionActivity();
+  connectSpeech();
+}).catch(console.error);

@@ -58,6 +58,14 @@
 #the-session-tools-metronome[data-collapsed="true"] .tst-title { margin-bottom: 0; }
 #the-session-tools-metronome[data-collapsed="true"] .tst-title-arrow svg { transform: rotate(180deg); }
 #the-session-tools-metronome[data-collapsed="true"] > :not(.tst-title) { display: none; }
+#the-session-tools-metronome .tst-voice-status { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 12px; color: #625d54; }
+#the-session-tools-metronome .tst-voice-led { width: 10px; height: 10px; border-radius: 50%; background: #8a8780; box-shadow: 0 0 0 1px rgba(0, 0, 0, .2); }
+#the-session-tools-metronome .tst-voice-status[data-voice-status="connected"] .tst-voice-led { background: #4d729d; }
+#the-session-tools-metronome .tst-voice-status[data-voice-status="waiting"] .tst-voice-led { background: #4b8d50; }
+#the-session-tools-metronome .tst-voice-status[data-voice-status="detected"] .tst-voice-led { background: #dfa32b; }
+#the-session-tools-metronome .tst-voice-status[data-voice-status="listening"] .tst-voice-led { background: #3174b9; animation: tst-voice-pulse 1s ease-in-out infinite; }
+#the-session-tools-metronome .tst-voice-status[data-voice-status="error"] .tst-voice-led { background: #b53c38; }
+@keyframes tst-voice-pulse { 50% { opacity: .35; } }
 #the-session-tools-metronome .tst-tempo,
 #the-session-tools-metronome .tst-controls { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 #the-session-tools-metronome .tst-tempo output { min-width: 88px; text-align: center; }

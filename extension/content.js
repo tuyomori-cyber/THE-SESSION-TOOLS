@@ -7,6 +7,10 @@ root.innerHTML = `
     <span class="tst-drag-handle"><span aria-hidden="true">♩</span> Metronome</span>
     <button type="button" class="tst-title-arrow" aria-expanded="true" aria-label="Metronomeを最小化"><svg viewBox="0 0 32 32" width="32" height="32" aria-hidden="true" focusable="false"><path d="M4 24 L16 0 L28 24 Z" fill="currentColor"/></svg></button>
   </div>
+  <div class="tst-voice-status" data-voice-status="unavailable" role="status" aria-live="polite">
+    <span class="tst-voice-led" aria-hidden="true"></span>
+    <span data-voice-status-text>音声操作：未接続</span>
+  </div>
   <div class="tst-tempo">
     <button type="button" data-action="decrease" aria-label="BPMを減らす">−</button>
     <output aria-live="polite"><strong data-bpm>110</strong> BPM</output>
@@ -49,6 +53,8 @@ const subdivisionControl = root.querySelector("[data-subdivision]");
 const soundControl = root.querySelector("[data-sound]");
 const volumeControl = root.querySelector("[data-volume-input]");
 const volumeOutput = root.querySelector("[data-volume]");
+const voiceStatus = root.querySelector(".tst-voice-status");
+const voiceStatusText = root.querySelector("[data-voice-status-text]");
 const dragHandle = root.querySelector(".tst-drag-handle");
 const collapseButton = root.querySelector(".tst-title-arrow");
 let tempoRepeatId;
@@ -145,6 +151,21 @@ function render(state) {
   volumeControl.value = volumePercent;
   volumeOutput.textContent = `${volumePercent}%`;
   root.dataset.playing = String(state.audioActuallyPlaying);
+  renderVoiceStatus(state.voiceStatus);
+}
+
+function renderVoiceStatus(status) {
+  const labels = {
+    unavailable: "音声操作：未接続",
+    connected: "音声操作：接続済み（待機準備中）",
+    waiting: "音声操作：FOXを待機中",
+    detected: "音声操作：FOXを検出",
+    listening: "音声操作：コマンドを認識中",
+    error: "音声操作：接続エラー"
+  };
+  const safeStatus = Object.hasOwn(labels, status) ? status : "unavailable";
+  voiceStatus.dataset.voiceStatus = safeStatus;
+  voiceStatusText.textContent = labels[safeStatus];
 }
 
 async function send(message) {
