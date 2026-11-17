@@ -81,4 +81,31 @@
 #the-session-tools-metronome .tst-bpm-slider input,
 #the-session-tools-metronome .tst-volume input { width: 100%; accent-color: #5c8a4e; }
 #the-session-tools-metronome .tst-controls { margin-top: 10px; }
+#the-session-tools-metronome .tst-controls button { flex: 1 1 0; min-width: 0; white-space: nowrap; }
+#the-session-tools-metronome .tst-tuner-launch { width: 100%; min-height: 36px; margin-top: 8px; }
+#the-session-tools-metronome .tst-views { display: grid; }
+#the-session-tools-metronome .tst-metronome-view,
+#the-session-tools-metronome .tst-tuner-view { grid-area: 1 / 1; min-width: 0; }
+#the-session-tools-metronome .tst-tuner-view { min-height: 192px; display: flex; flex-direction: column; justify-content: center; }
+#the-session-tools-metronome .tst-metronome-view[hidden],
+#the-session-tools-metronome .tst-tuner-view[hidden] { visibility: hidden; pointer-events: none; }
+#the-session-tools-metronome .tst-metronome-view[hidden] { display: block !important; }
+#the-session-tools-metronome .tst-tuner-view[hidden] { display: flex !important; }
+#the-session-tools-metronome .tst-tuner-reading { text-align: center; }
+#the-session-tools-metronome .tst-tuner-note { font-size: 36px; line-height: 1.15; font-weight: 700; }
+#the-session-tools-metronome .tst-tuner-frequency { min-height: 1.4em; color: #625d54; font-size: 13px; }
+#the-session-tools-metronome .tst-pitch-meter { height: 28px; margin-top: 9px; padding: 0 8px; }
+#the-session-tools-metronome .tst-pitch-track { position: relative; height: 100%; }
+#the-session-tools-metronome .tst-pitch-track::before { content: ""; position: absolute; left: 0; right: 0; top: 13px; height: 2px; background: #bbb2a4; }
+#the-session-tools-metronome .tst-pitch-center { position: absolute; left: 50%; top: 5px; width: 2px; height: 18px; background: #625d54; transform: translateX(-50%); }
+#the-session-tools-metronome .tst-pitch-dot { display: none; position: absolute; top: 7px; width: 14px; height: 14px; border: 2px solid #fffdf8; border-radius: 50%; box-sizing: border-box; transform: translateX(-50%); box-shadow: 0 0 0 1px #625d54; transition: left 90ms linear, background-color 90ms linear; }
+#the-session-tools-metronome .tst-pitch-meter[data-signal="true"] .tst-pitch-dot { display: block; }
+#the-session-tools-metronome .tst-tuner-cents { margin-top: 3px; font-weight: 700; font-variant-numeric: tabular-nums; }
+#the-session-tools-metronome .tst-tuner-directions { display: flex; justify-content: space-between; font-size: 11px; color: #625d54; }
+#the-session-tools-metronome .tst-tuner-reference { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-top: 9px; }
+#the-session-tools-metronome .tst-tuner-reference output { min-width: 48px; text-align: center; }
+#the-session-tools-metronome .tst-tuner-status { min-height: 1.3em; margin: 0; text-align: center; font-weight: 700; }
+#the-session-tools-metronome .tst-tuner-resume { width: 100%; margin-top: 8px; }
+#the-session-tools-metronome .tst-tuner-resume[hidden] { display: none !important; }
+#the-session-tools-metronome .tst-tuner-back { width: 100%; margin-top: 8px; text-shadow: none; letter-spacing: normal; text-transform: none; }
 #the-session-tools-metronome[data-playing="true"] { border-color: #5c8a4e; }

@@ -27,12 +27,92 @@ const state = {
   volume: DEFAULT_VOLUME,
   sound: "crisp",
   subdivision: DEFAULT_SUBDIVISION,
-  voiceStatus: "unavailable"
+  voiceStatus: "unavailable",
+  tunerStatus: "idle",
+  panelMode: "metronome",
+  tunerReferenceHz: 440,
+  tunerFrequencyHz: null
 };
 
 let speechPort;
 let voiceRecordingId;
 let voiceStopTimer;
+let tunerId;
+let tunerStartRequested = false;
+let tunerStopSent = false;
+let tunerWanted = false;
+let tunerOwner;
+let tunerOwnerActive = false;
+let activityRevision = 0;
+let returnToMetronomeAfterTunerStop = false;
+
+async function startTuner(tab) {
+  if (tab?.id !== undefined && tab.windowId !== undefined) tunerOwner = { tabId: tab.id, windowId: tab.windowId };
+  if (!tunerOwner) {
+    const windows = await browser.windows.getAll({ populate: true, windowTypes: ["normal"] });
+    const focused = windows.find((window) => window.focused && window.state !== "minimized");
+    const activeTab = focused?.tabs.find((candidate) => candidate.active && isSessionUrl(candidate.url));
+    if (!activeTab) return;
+    tunerOwner = { tabId: activeTab.id, windowId: focused.id };
+  }
+  tunerWanted = true;
+  state.panelMode = "tuner";
+  await refreshSessionActivity();
+  await reconcileTuner();
+}
+
+async function requestTunerStart() {
+  if (tunerStartRequested || tunerId || tunerStopSent || !tunerWanted || !tunerOwnerActive) return;
+  tunerStartRequested = true;
+  state.tunerStatus = "starting";
+  await broadcastState();
+  if (!speechPort) {
+    connectSpeech();
+    return;
+  }
+  speechPort.postMessage({ version: 1, action: "stop_wakeword" });
+}
+
+async function stopTuner({ returnToMetronome = false } = {}) {
+  tunerWanted = false;
+  tunerOwner = undefined;
+  tunerOwnerActive = false;
+  returnToMetronomeAfterTunerStop ||= returnToMetronome;
+  if (returnToMetronome) state.panelMode = "metronome";
+  await reconcileTuner();
+}
+
+async function reconcileTuner() {
+  if (tunerWanted && tunerOwnerActive) {
+    if (!tunerId && !tunerStartRequested && !tunerStopSent && state.tunerStatus !== "busy") await requestTunerStart();
+    return;
+  }
+  state.tunerFrequencyHz = null;
+  if (tunerId && speechPort && !tunerStopSent) {
+    tunerStopSent = true;
+    state.tunerStatus = "stopping";
+    speechPort.postMessage({ version: 1, action: "stop_tuner", tunerId });
+  } else if (!tunerId && !tunerStartRequested && !tunerStopSent) {
+    state.tunerStatus = tunerWanted ? "paused" : "idle";
+    if (tunerWanted) state.voiceStatus = "paused";
+    if (!tunerWanted && returnToMetronomeAfterTunerStop) returnToMetronomeAfterTunerStop = false;
+  }
+  await broadcastState();
+}
+
+async function resumeWakewordIfActive() {
+  const windows = await browser.windows.getAll({ populate: true, windowTypes: ["normal"] });
+  if (tunerWanted || tunerId || tunerStartRequested || tunerStopSent || !speechPort) return;
+  const active = windows.some((window) => window.focused && window.state !== "minimized" &&
+    window.tabs.some((tab) => tab.active && isSessionUrl(tab.url) && visibilityByTabId.get(tab.id) !== false));
+  if (active) {
+    state.voiceStatus = "connected";
+    speechPort.postMessage({ version: 1, action: "start_wakeword" });
+  } else {
+    state.voiceStatus = "paused";
+  }
+  await broadcastState();
+}
 
 function connectSpeech() {
   if (speechPort) return;
@@ -47,8 +127,23 @@ function connectSpeech() {
       } else if (message.event === "engine_prepared") {
         speechPort.postMessage({ version: 1, action: "start_wakeword" });
       } else if (message.event === "wakeword_waiting") {
+        if (tunerStartRequested) {
+          speechPort.postMessage({ version: 1, action: "stop_wakeword" });
+          return;
+        }
         state.voiceStatus = "waiting";
         broadcastState().catch(console.error);
+      } else if (message.event === "wakeword_stopped") {
+        if (tunerStartRequested && tunerWanted && tunerOwnerActive) {
+          speechPort.postMessage({ version: 1, action: "start_tuner" });
+        } else {
+          tunerStartRequested = false;
+          if (tunerWanted) reconcileTuner().catch(console.error);
+          else {
+            reconcileTuner().catch(console.error);
+            resumeWakewordIfActive().catch(console.error);
+          }
+        }
       } else if (message.event === "wakeword_detected") {
         state.voiceStatus = "listening";
         broadcastState().catch(console.error);
@@ -62,7 +157,10 @@ function connectSpeech() {
         if (voiceStopTimer) clearTimeout(voiceStopTimer);
         voiceRecordingId = undefined;
         const command = String(message.text ?? "").replaceAll(/\s/g, "");
-        if (command === "再生") {
+        const isTunerCommand = ["チューナー", "チューナー起動して", "チューナーを起動して", "十七"].includes(command);
+        if (isTunerCommand) {
+          startTuner().catch(console.error);
+        } else if (command === "再生") {
           state.userWantsPlayback = true;
           startAudio().catch(console.error);
         } else if (command === "停止") {
@@ -90,14 +188,71 @@ function connectSpeech() {
           else if (bpm !== undefined) setBpm(bpm).catch(console.error);
           else if (volume !== undefined) setVolume(volume / 100).catch(console.error);
         }
-        speechPort.postMessage({ version: 1, action: "start_wakeword" });
+        if (!isTunerCommand) speechPort.postMessage({ version: 1, action: "start_wakeword" });
+      } else if (message.event === "tuner_started") {
+        tunerStartRequested = false;
+        tunerId = message.tunerId;
+        state.tunerStatus = "active";
+        state.voiceStatus = "waiting";
+        reconcileTuner().catch(console.error);
+        broadcastState().catch(console.error);
+      } else if (message.event === "tuner_wakeword_detected") {
+        if (state.tunerStatus === "active" && message.tunerId === tunerId) {
+          stopTuner({ returnToMetronome: true }).catch(console.error);
+        }
+      } else if (message.event === "tuner_pitch") {
+        if (state.tunerStatus === "active" && message.tunerId === tunerId) {
+          const frequency = message.frequencyHz;
+          state.tunerFrequencyHz = typeof frequency === "number" && Number.isFinite(frequency) && frequency >= 55 && frequency <= 1200 ? frequency : null;
+          broadcastState().catch(console.error);
+        }
+      } else if (message.event === "tuner_stopped") {
+        tunerStartRequested = false;
+        tunerStopSent = false;
+        tunerId = undefined;
+        state.tunerStatus = tunerWanted ? "paused" : "idle";
+        state.tunerFrequencyHz = null;
+        if (returnToMetronomeAfterTunerStop) {
+          state.panelMode = "metronome";
+          returnToMetronomeAfterTunerStop = false;
+        }
+        if (tunerWanted) {
+          if (!tunerOwnerActive) state.voiceStatus = "paused";
+          reconcileTuner().catch(console.error);
+        } else {
+          resumeWakewordIfActive().catch(console.error);
+        }
+        broadcastState().catch(console.error);
       } else if (message.event === "error") {
+        const startingTuner = tunerStartRequested;
+        tunerStartRequested = false;
+        if (message.code === "BUSY" && startingTuner && tunerWanted) {
+          state.tunerStatus = "busy";
+          state.voiceStatus = "paused";
+          broadcastState().catch(console.error);
+          return;
+        }
+        if (message.code === "WAKEWORD_STOPPED" && tunerId) {
+          state.tunerFrequencyHz = null;
+          state.voiceStatus = "error";
+          broadcastState().catch(console.error);
+          return;
+        }
+        if (state.tunerStatus === "starting" || state.tunerStatus === "stopping") {
+          state.tunerStatus = "error";
+          broadcastState().catch(console.error);
+        }
         state.voiceStatus = "error";
         broadcastState().catch(console.error);
       }
     });
     speechPort.onDisconnect.addListener(() => {
       speechPort = undefined;
+      tunerStartRequested = false;
+      tunerStopSent = false;
+      tunerId = undefined;
+      state.tunerFrequencyHz = null;
+      if (state.tunerStatus !== "idle") state.tunerStatus = "error";
       state.voiceStatus = "error";
       broadcastState().catch(console.error);
     });
@@ -126,13 +281,15 @@ function publicState() {
 async function initialize() {
   if (initialized) return;
   if (!initializePromise) {
-    initializePromise = browser.storage.local.get({ bpm: DEFAULT_BPM, autoResume: true, volume: DEFAULT_VOLUME, sound: "crisp", subdivision: DEFAULT_SUBDIVISION })
+    initializePromise = browser.storage.local.get({ bpm: DEFAULT_BPM, autoResume: true, volume: DEFAULT_VOLUME, sound: "crisp", subdivision: DEFAULT_SUBDIVISION, tunerReferenceHz: 440 })
       .then((saved) => {
         state.bpm = clampBpm(saved.bpm);
         state.autoResume = Boolean(saved.autoResume);
         state.volume = clampVolume(saved.volume);
         state.sound = sanitizeSound(saved.sound);
         state.subdivision = sanitizeSubdivision(saved.subdivision);
+        const reference = Number(saved.tunerReferenceHz);
+        state.tunerReferenceHz = Number.isFinite(reference) ? Math.max(432, Math.min(446, Math.round(reference))) : 440;
         initialized = true;
       });
   }
@@ -323,7 +480,22 @@ function setInactivityTimer() {
 }
 
 async function refreshSessionActivity() {
+  const revision = ++activityRevision;
   const windows = await browser.windows.getAll({ populate: true, windowTypes: ["normal"] });
+  if (revision !== activityRevision) return;
+  const ownerWindow = tunerOwner && windows.find((window) => window.id === tunerOwner.windowId);
+  const ownerTab = ownerWindow?.tabs.find((tab) => tab.id === tunerOwner.tabId);
+  const ownerActive = Boolean(ownerTab && ownerWindow.focused && ownerWindow.state !== "minimized" &&
+    ownerTab.active && isSessionUrl(ownerTab.url) && visibilityByTabId.get(ownerTab.id) !== false);
+  if (tunerWanted && !ownerTab) {
+    await stopTuner({ returnToMetronome: true });
+  } else if (tunerWanted && ownerTab && !isSessionUrl(ownerTab.url)) {
+    await stopTuner({ returnToMetronome: true });
+  } else if (tunerWanted && ownerActive !== tunerOwnerActive) {
+    tunerOwnerActive = ownerActive;
+    if (ownerActive && state.tunerStatus === "busy") state.tunerStatus = "paused";
+    await reconcileTuner();
+  }
   const isActive = windows.some((window) => window.focused && window.state !== "minimized" &&
     window.tabs.some((tab) => tab.active && isSessionUrl(tab.url) && visibilityByTabId.get(tab.id) !== false));
   if (isActive === sessionIsActive) return;
@@ -332,6 +504,10 @@ async function refreshSessionActivity() {
   if (inactivityTimer) clearTimeout(inactivityTimer);
   inactivityTimer = undefined;
   if (sessionIsActive) {
+    if (!tunerWanted && !tunerId && !tunerStartRequested && !tunerStopSent && state.voiceStatus === "paused" && speechPort) {
+      state.voiceStatus = "connected";
+      speechPort.postMessage({ version: 1, action: "start_wakeword" });
+    }
     if (state.userWantsPlayback && !state.audioActuallyPlaying && state.autoResume) await startAudio();
   } else {
     setInactivityTimer();
@@ -385,6 +561,28 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
     case "stop":
       await stopAudio({ clearIntent: true });
       return publicState();
+    case "openTuner":
+      await startTuner(sender.tab);
+      return publicState();
+    case "resumeTuner":
+      if (tunerWanted && sender.tab?.id === tunerOwner?.tabId && state.tunerStatus === "busy") {
+        state.tunerStatus = "paused";
+        await refreshSessionActivity();
+        await reconcileTuner();
+      }
+      return publicState();
+    case "closeTuner":
+      await stopTuner({ returnToMetronome: true });
+      return publicState();
+    case "adjustTunerReference": {
+      const delta = Number(message.delta);
+      if (delta === -1 || delta === 1) {
+        state.tunerReferenceHz = Math.max(432, Math.min(446, state.tunerReferenceHz + delta));
+        await browser.storage.local.set({ tunerReferenceHz: state.tunerReferenceHz });
+        await broadcastState();
+      }
+      return publicState();
+    }
     case "visibility":
       if (sender.tab?.id !== undefined) visibilityByTabId.set(sender.tab.id, Boolean(message.visible));
       await refreshSessionActivity();
@@ -404,6 +602,7 @@ browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
 });
 browser.tabs.onRemoved.addListener((tabId) => {
   visibilityByTabId.delete(tabId);
+  if (tunerOwner?.tabId === tabId) stopTuner({ returnToMetronome: true }).catch(console.error);
   // Exclude the closing ID even if tabs.query() briefly still returns it.
   refreshOrStopForSessionTabs(tabId).catch(console.error);
 });

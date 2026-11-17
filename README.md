@@ -54,8 +54,13 @@ The Sessionを開いている間は、音声状態LEDが緑の「FOXを待機中
 | 音量百％ / 零％ / 百五十％ | 音量を個別設定（0〜150%） |
 | 音量少し上げて / 下げて | 音量を+10% / -10% |
 | 分割ビート / 八分 / 三連符（三連単）/ 十六分（十六部） | Divisionを設定 |
+| FOXの後にチューナー / チューナー起動して / チューナーを起動して / 十七 | パネルをTuner表示へ切り替えて起動 |
 
 LEDは灰＝未接続、青灰＝接続済み、緑＝待機、橙＝検出、点滅青＝認識中、赤＝障害です。
+
+チューナーはメトロノームの **Tuner を開く** または上記音声操作で、同じパネルの表示をTunerへ切り替えて測定を開始します。単音の音名・周波数・cent差を表示し、点は低いと左、高いと右へ動き、ずれが大きい赤から中央の緑へ滑らかに変化します。基準A4は432〜446Hzの範囲で変更でき、設定は保存されます。開始から1.5秒後以降の`FOX`単独、または **Metronomeへ戻る** で終了します。
+
+開始元のThe Sessionタブが非表示になるか、ウィンドウが非アクティブ・最小化になると、チューナーは一時停止してマイクを解放します。同じタブが再び前面に戻ると一度だけ自動再開します。マイクが他で使われている場合は、空いた後で **再開** を押してください。現在は55〜1200Hzの単音を対象とし、非アクティブ時の一時停止・復帰は実機確認待ちです。
 
 三角ボタンは枠を含めて44×44pxの操作領域です。32×32pxのSVG領域内に三角を描き、上下どちらの向きでも三角の重心が枠の中心と一致するよう配置しています。Enter・Spaceでも、フォーカスした三角ボタンを操作できます。パネルの最小化だけでは再生は停止しません。
 
@@ -103,7 +108,7 @@ cd extension
 zip ../the-session-tools-0.1.3.zip manifest.json background.js content.js content.css
 ```
 
-作成した ZIP は、ディレクトリそのものではなく、直下に `manifest.json` がある構造でなければなりません。リリース用の `the-session-tools-0.1.3.zip` はこの構造で生成・静的検証済みです。AMO Developer Hub へアップロードし、非公開配布なら **On your own (Unlisted)** を選択して署名済み XPI を取得します。
+作成した ZIP は、ディレクトリそのものではなく、直下に `manifest.json` がある構造でなければなりません。AMO Developer Hub へアップロードし、非公開配布なら **On your own (Unlisted)** を選択して署名済み XPI を取得します。
 
 ## 構成
 
@@ -111,6 +116,7 @@ zip ../the-session-tools-0.1.3.zip manifest.json background.js content.js conten
 - `extension/content.js` — The Session へUIを追加し、入力をbackgroundへ送信
 - `extension/content.css` — メトロノームUIのスタイル
 - `extension/background.js` — 再生状態、Web Audio API、タブ／ウィンドウのライフサイクルを管理
+- `extension/content.js` / `content.css` 内のTuner表示 — メトロノーム領域を置き換える音程メーターと基準ピッチ設定
 
 音源と再生状態は background script が保持するため、The Session 内での画面遷移やUIの再注入に依存しません。
 
