@@ -125,9 +125,13 @@ function connectSpeech() {
       } else if (message.event === "microphone_prepared") {
         speechPort.postMessage({ version: 1, action: "prepare_engine", engine: "reazonspeech_k2" });
       } else if (message.event === "engine_prepared") {
-        speechPort.postMessage({ version: 1, action: "start_wakeword" });
+        if (sessionIsActive && !tunerWanted) speechPort.postMessage({ version: 1, action: "start_wakeword" });
+        else {
+          state.voiceStatus = "paused";
+          broadcastState().catch(console.error);
+        }
       } else if (message.event === "wakeword_waiting") {
-        if (tunerStartRequested) {
+        if (tunerStartRequested || !sessionIsActive) {
           speechPort.postMessage({ version: 1, action: "stop_wakeword" });
           return;
         }
@@ -145,17 +149,32 @@ function connectSpeech() {
           }
         }
       } else if (message.event === "wakeword_detected") {
+        if (!sessionIsActive || tunerWanted) {
+          state.voiceStatus = "paused";
+          broadcastState().catch(console.error);
+          return;
+        }
         state.voiceStatus = "listening";
         broadcastState().catch(console.error);
         speechPort.postMessage({ version: 1, action: "start_recording" });
       } else if (message.event === "started") {
         voiceRecordingId = message.recordingId;
+        if (!sessionIsActive) {
+          speechPort.postMessage({ version: 1, action: "cancel_recording", recordingId: voiceRecordingId });
+          voiceRecordingId = undefined;
+          return;
+        }
         voiceStopTimer = setTimeout(() => {
           if (voiceRecordingId) speechPort?.postMessage({ version: 1, action: "stop_recording", recordingId: voiceRecordingId });
         }, 3000);
       } else if (message.event === "result") {
         if (voiceStopTimer) clearTimeout(voiceStopTimer);
         voiceRecordingId = undefined;
+        if (!sessionIsActive) {
+          state.voiceStatus = "paused";
+          broadcastState().catch(console.error);
+          return;
+        }
         const command = String(message.text ?? "").replaceAll(/\s/g, "");
         const isTunerCommand = ["チューナー", "チューナー起動して", "チューナーを起動して", "十七"].includes(command);
         if (isTunerCommand) {
@@ -188,7 +207,7 @@ function connectSpeech() {
           else if (bpm !== undefined) setBpm(bpm).catch(console.error);
           else if (volume !== undefined) setVolume(volume / 100).catch(console.error);
         }
-        if (!isTunerCommand) speechPort.postMessage({ version: 1, action: "start_wakeword" });
+        if (!isTunerCommand) resumeWakewordIfActive().catch(console.error);
       } else if (message.event === "tuner_started") {
         tunerStartRequested = false;
         tunerId = message.tunerId;
@@ -479,12 +498,12 @@ function setInactivityTimer() {
   }, INACTIVITY_TIMEOUT_MS);
 }
 
-async function refreshSessionActivity() {
+async function refreshSessionActivity(excludingTabId) {
   const revision = ++activityRevision;
   const windows = await browser.windows.getAll({ populate: true, windowTypes: ["normal"] });
   if (revision !== activityRevision) return;
   const ownerWindow = tunerOwner && windows.find((window) => window.id === tunerOwner.windowId);
-  const ownerTab = ownerWindow?.tabs.find((tab) => tab.id === tunerOwner.tabId);
+  const ownerTab = ownerWindow?.tabs.find((tab) => tab.id === tunerOwner.tabId && tab.id !== excludingTabId);
   const ownerActive = Boolean(ownerTab && ownerWindow.focused && ownerWindow.state !== "minimized" &&
     ownerTab.active && isSessionUrl(ownerTab.url) && visibilityByTabId.get(ownerTab.id) !== false);
   if (tunerWanted && !ownerTab) {
@@ -497,7 +516,7 @@ async function refreshSessionActivity() {
     await reconcileTuner();
   }
   const isActive = windows.some((window) => window.focused && window.state !== "minimized" &&
-    window.tabs.some((tab) => tab.active && isSessionUrl(tab.url) && visibilityByTabId.get(tab.id) !== false));
+    window.tabs.some((tab) => tab.id !== excludingTabId && tab.active && isSessionUrl(tab.url) && visibilityByTabId.get(tab.id) !== false));
   if (isActive === sessionIsActive) return;
   sessionIsActive = isActive;
   inactivityGeneration += 1;
@@ -510,6 +529,17 @@ async function refreshSessionActivity() {
     }
     if (state.userWantsPlayback && !state.audioActuallyPlaying && state.autoResume) await startAudio();
   } else {
+    if (speechPort && !tunerWanted && !tunerId && !tunerStartRequested && !tunerStopSent) {
+      state.voiceStatus = "paused";
+      if (voiceStopTimer) clearTimeout(voiceStopTimer);
+      voiceStopTimer = undefined;
+      if (voiceRecordingId) {
+        speechPort.postMessage({ version: 1, action: "cancel_recording", recordingId: voiceRecordingId });
+        voiceRecordingId = undefined;
+      }
+      speechPort.postMessage({ version: 1, action: "stop_wakeword" });
+      await broadcastState();
+    }
     setInactivityTimer();
   }
 }
@@ -532,9 +562,8 @@ async function refreshOrStopForSessionTabs(closingTabId) {
   const tabs = await getSessionTabs({ excludingTabId: closingTabId });
   if (tabs.length === 0) {
     await stopAudio({ clearIntent: true });
-  } else {
-    await refreshSessionActivity();
   }
+  await refreshSessionActivity(closingTabId);
 }
 
 browser.runtime.onMessage.addListener(async (message, sender) => {

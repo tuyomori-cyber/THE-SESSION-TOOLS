@@ -234,8 +234,8 @@ function renderVoiceStatus(status) {
   const labels = {
     unavailable: "音声操作：未接続",
     connected: "音声操作：接続済み（待機準備中）",
-    waiting: "音声操作：FOXを待機中",
-    detected: "音声操作：FOXを検出",
+    waiting: "音声操作：呼びかけを待機中",
+    detected: "音声操作：呼びかけを検出",
     listening: "音声操作：コマンドを認識中",
     paused: "音声操作：一時停止中",
     error: "音声操作：接続エラー"
