@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>THE SESSION TOOLS</title>
+  <link rel="stylesheet" href="offline-tuner.css">
+</head>
+<body>
+  <main>
+    <h1>THE SESSION TOOLS</h1>
+    <p data-availability class="availability" role="status">状態を確認中</p>
+    <section class="reading" aria-label="チューナーの測定結果">
+      <div data-note class="note">—</div>
+      <div data-frequency class="frequency">音を鳴らしてください</div>
+      <div class="meter" data-meter aria-hidden="true"><span></span><i data-dot></i></div>
+      <div data-cents class="cents">— cent</div>
+      <div class="directions"><span>低い</span><span>高い</span></div>
+    </section>
+    <p data-status class="status" role="status">待機中</p>
+    <p class="reference">基準 A4: <output data-reference>440 Hz</output></p>
+    <button type="button" data-start>チューナーを開始</button>
+    <button type="button" data-resume hidden>再開</button>
+    <button type="button" data-stop hidden>停止</button>
+  </main>
+  <script src="offline-tuner.js"></script>
+</body>
+</html>

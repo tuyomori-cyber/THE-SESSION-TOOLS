@@ -4,7 +4,7 @@ The Session（[thesession.org](https://thesession.org/)）上で、譜面を見�
 
 非公式の拡張機能であり、The Session とは関係ありません。
 
-このREADMEはv0.1.3の実装を説明します。実装の正本は[現行仕様 v0.2](specification/THE%20SESSION%20TOOLS_仕様書v0.2.md)、保留事項は[TODO](TODO.md)です。ドラッグ・最小化操作の改善はv0.1.3に含まれます。
+このREADMEはv0.1.4の実装を説明します。実装の正本は[現行仕様 v0.2](specification/THE%20SESSION%20TOOLS_仕様書v0.2.md)、保留事項は[TODO](TODO.md)です。
 
 ## 機能
 
@@ -22,6 +22,7 @@ The Session（[thesession.org](https://thesession.org/)）上で、譜面を見�
 - BPM、分割、音色、音量を Firefox のローカルストレージに保存する
 - The Session が非アクティブ・背面・最小化の状態で5分経過すると、再生希望を保持したまま音だけを停止する。The Session に戻ると自動で再開する
 - 最後の The Session タブを閉じたとき、または最後のタブが The Session 以外へ遷移したときに停止する
+- The Sessionへの接続に失敗したタブでも、ツールバーボタンから明示的にチューナーを起動できる
 
 再生状態はブラウザ再起動後には復元しません。
 
@@ -39,6 +40,12 @@ v0.1.1以前で保存された Beep または Click の音色設定は、v0.1.2 
 1. The Session の任意のページを開きます。
 2. 右下の **Metronome** で BPM、Division、Sound、Volume を調整します。アプリ名の範囲をドラッグすると、最小化中も位置を移動できます。最小化・展開は右側の三角ボタン（44×44px）のタップで切り替えます。アプリ名のタップでは切り替わりません。位置と最小化状態は保存されます。
 3. **Play** を押して開始し、**Stop** で停止します。
+
+### オフライン時のチューナー
+
+会場などでネットワークに接続できない場合は、まず `https://thesession.org/` または `https://www.thesession.org/` を開きます。Firefoxの接続エラー画面になったら、同じタブのままツールバーにある **THE SESSION TOOLS** を押し、**チューナーを開始** を選びます。接続エラー画面は拡張がDOMを追加できないため、オフライン時はこのポップアップを操作画面として使います。
+
+誤ってマイクを使用しないよう、ドメインへの接続試行だけではチューナーを開始しません。開始後は、所有タブを切り替えるか別のURLへ移動すると、従来どおりマイクを解放します。
 
 The Session の別ページへ移動しても、設定と再生状態は引き継がれます。
 
@@ -105,7 +112,7 @@ systemctl --user restart foxbook-speech
 
 ```bash
 cd extension
-zip ../the-session-tools-0.1.3.zip manifest.json background.js content.js content.css
+zip ../the-session-tools-0.1.4.zip manifest.json background.js content.js content.css offline-tuner.html offline-tuner.css offline-tuner.js
 ```
 
 作成した ZIP は、ディレクトリそのものではなく、直下に `manifest.json` がある構造でなければなりません。AMO Developer Hub へアップロードし、非公開配布なら **On your own (Unlisted)** を選択して署名済み XPI を取得します。
@@ -115,6 +122,7 @@ zip ../the-session-tools-0.1.3.zip manifest.json background.js content.js conten
 - `extension/manifest.json` — Firefox Manifest V3 の定義
 - `extension/content.js` — The Session へUIを追加し、入力をbackgroundへ送信
 - `extension/content.css` — メトロノームUIのスタイル
+- `extension/offline-tuner.*` — 接続エラー画面から使うツールバーポップアップのチューナーUI
 - `extension/background.js` — 再生状態、Web Audio API、タブ／ウィンドウのライフサイクルを管理
 - `extension/content.js` / `content.css` 内のTuner表示 — メトロノーム領域を置き換える音程メーターと基準ピッチ設定
 
