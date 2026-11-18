@@ -47,10 +47,27 @@ let tunerOwner;
 let tunerOwnerActive = false;
 let activityRevision = 0;
 let returnToMetronomeAfterTunerStop = false;
+let offlinePlaybackOwner;
+let offlineTunerReleaseTabId;
+const onlineHandoffs = new Map();
+const tunerReleaseWaiters = new Set();
 
-async function startTuner(tab) {
+function resolveTunerRelease() {
+  if (tunerId || tunerStartRequested || tunerStopSent) return;
+  if (!tunerWanted) offlineTunerReleaseTabId = undefined;
+  for (const resolve of tunerReleaseWaiters) resolve();
+  tunerReleaseWaiters.clear();
+}
+
+async function waitForTunerRelease() {
+  if (!tunerId && !tunerStartRequested && !tunerStopSent) return;
+  await new Promise((resolve) => tunerReleaseWaiters.add(resolve));
+}
+
+async function startTuner(tab, { offline = false } = {}) {
   if (tab?.id !== undefined && tab.windowId !== undefined && isTunerEligibleTab(tab)) {
-    tunerOwner = { tabId: tab.id, windowId: tab.windowId, offline: !isSessionUrl(tab.url) };
+    tunerOwner = { tabId: tab.id, windowId: tab.windowId, offline: offline || !isSessionUrl(tab.url) };
+    if (tunerOwner.offline) offlineTunerReleaseTabId = tab.id;
   }
   if (!tunerOwner) {
     const windows = await browser.windows.getAll({ populate: true, windowTypes: ["normal"] });
@@ -84,6 +101,7 @@ async function stopTuner({ returnToMetronome = false } = {}) {
   returnToMetronomeAfterTunerStop ||= returnToMetronome;
   if (returnToMetronome) state.panelMode = "metronome";
   await reconcileTuner();
+  resolveTunerRelease();
 }
 
 async function reconcileTuner() {
@@ -146,6 +164,7 @@ function connectSpeech() {
           speechPort.postMessage({ version: 1, action: "start_tuner" });
         } else {
           tunerStartRequested = false;
+          resolveTunerRelease();
           if (tunerWanted) reconcileTuner().catch(console.error);
           else {
             reconcileTuner().catch(console.error);
@@ -239,6 +258,7 @@ function connectSpeech() {
         tunerStartRequested = false;
         tunerStopSent = false;
         tunerId = undefined;
+        resolveTunerRelease();
         state.tunerStatus = tunerWanted ? "paused" : "idle";
         state.tunerFrequencyHz = null;
         if (returnToMetronomeAfterTunerStop) {
@@ -255,6 +275,7 @@ function connectSpeech() {
       } else if (message.event === "error") {
         const startingTuner = tunerStartRequested;
         tunerStartRequested = false;
+        resolveTunerRelease();
         if (message.code === "BUSY" && startingTuner && tunerWanted) {
           state.tunerStatus = "busy";
           state.voiceStatus = "paused";
@@ -284,6 +305,7 @@ function connectSpeech() {
       tunerStartRequested = false;
       tunerStopSent = false;
       tunerId = undefined;
+      resolveTunerRelease();
       state.tunerFrequencyHz = null;
       if (state.tunerStatus !== "idle") state.tunerStatus = "error";
       state.voiceStatus = "error";
@@ -428,7 +450,7 @@ async function startAudio() {
   await initialize();
   if (state.audioActuallyPlaying) return;
   const sessionTabs = await getSessionTabs();
-  if (sessionTabs.length === 0) {
+  if (sessionTabs.length === 0 && !offlinePlaybackOwner) {
     state.userWantsPlayback = false;
     await broadcastState();
     return;
@@ -445,7 +467,10 @@ async function startAudio() {
 }
 
 async function stopAudio({ clearIntent = false } = {}) {
-  if (clearIntent) state.userWantsPlayback = false;
+  if (clearIntent) {
+    state.userWantsPlayback = false;
+    offlinePlaybackOwner = undefined;
+  }
   if (schedulerId) clearInterval(schedulerId);
   schedulerId = undefined;
   state.audioActuallyPlaying = false;
@@ -520,6 +545,10 @@ async function refreshSessionActivity() {
   const revision = ++activityRevision;
   const windows = await browser.windows.getAll({ populate: true, windowTypes: ["normal"] });
   if (revision !== activityRevision) return;
+  if (offlinePlaybackOwner && !windows.some((window) => window.id === offlinePlaybackOwner.windowId &&
+    window.tabs.some((tab) => tab.id === offlinePlaybackOwner.tabId))) {
+    await stopAudio({ clearIntent: true });
+  }
   const ownerWindow = tunerOwner && windows.find((window) => window.id === tunerOwner.windowId);
   const ownerTab = ownerWindow?.tabs.find((tab) => tab.id === tunerOwner.tabId);
   const ownerActive = Boolean(ownerTab && ownerWindow.focused && ownerWindow.state !== "minimized" &&
@@ -534,7 +563,8 @@ async function refreshSessionActivity() {
     await reconcileTuner();
   }
   const isActive = windows.some((window) => window.focused && window.state !== "minimized" &&
-    window.tabs.some((tab) => tab.active && isSessionUrl(tab.url) && visibilityByTabId.get(tab.id) !== false));
+    window.tabs.some((tab) => tab.active && (isSessionUrl(tab.url) ||
+      (offlinePlaybackOwner?.tabId === tab.id && offlineTunerAccessByTabId.has(tab.id))) && visibilityByTabId.get(tab.id) !== false));
   if (isActive === sessionIsActive) return;
   sessionIsActive = isActive;
   inactivityGeneration += 1;
@@ -578,6 +608,7 @@ function isNetworkErrorUrl(url = "") {
 
 function hasOfflineTunerAccess(tabId) {
   const expiresAt = offlineTunerAccessByTabId.get(tabId);
+  if (expiresAt && (offlinePlaybackOwner?.tabId === tabId || (tunerWanted && tunerOwner?.offline && tunerOwner.tabId === tabId))) return true;
   if (!expiresAt || expiresAt <= Date.now()) {
     offlineTunerAccessByTabId.delete(tabId);
     return false;
@@ -600,8 +631,26 @@ async function getActiveTab() {
 
 async function offlineTunerAvailability() {
   const tab = await getActiveTab();
-  if (isSessionUrl(tab?.url)) return { available: true, mode: "online" };
+  if (onlineHandoffs.has(tab?.id)) return { available: false, mode: "online" };
+  if (isSessionUrl(tab?.url) && !hasOfflineTunerAccess(tab.id)) return { available: false, mode: "online" };
   return { available: hasOfflineTunerAccess(tab?.id), mode: "offline" };
+}
+
+async function handoffOnlineTab(tab) {
+  if (!tab || !isSessionUrl(tab.url)) return;
+  if (onlineHandoffs.has(tab.id)) return onlineHandoffs.get(tab.id);
+  const handoff = (async () => {
+    offlineTunerAccessByTabId.delete(tab.id);
+    if (offlinePlaybackOwner?.tabId === tab.id) await stopAudio({ clearIntent: true });
+    if ((tunerOwner?.offline && tunerOwner.tabId === tab.id) || offlineTunerReleaseTabId === tab.id) {
+      if (tunerOwner?.offline && tunerOwner.tabId === tab.id) await stopTuner({ returnToMetronome: true });
+      await waitForTunerRelease();
+    }
+    if (browser.action) await browser.action.disable(tab.id).catch(console.error);
+    await refreshSessionActivity();
+  })();
+  onlineHandoffs.set(tab.id, handoff);
+  try { await handoff; } finally { onlineHandoffs.delete(tab.id); }
 }
 
 async function getSessionTabs({ excludingTabId } = {}) {
@@ -611,7 +660,7 @@ async function getSessionTabs({ excludingTabId } = {}) {
 
 async function refreshOrStopForSessionTabs(closingTabId) {
   const tabs = await getSessionTabs({ excludingTabId: closingTabId });
-  if (tabs.length === 0) {
+  if (tabs.length === 0 && !offlinePlaybackOwner) {
     await stopAudio({ clearIntent: true });
   }
   // Also reconcile an active tuner. This is essential when the final target
@@ -626,9 +675,24 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
       return publicState();
     case "getOfflineTunerState":
       return { ...publicState(), ...(await offlineTunerAvailability()) };
+    case "onlinePageReady":
+      await handoffOnlineTab(sender.tab);
+      return publicState();
+    case "offlinePlay": {
+      const tab = await getActiveTab();
+      const availability = await offlineTunerAvailability();
+      if (availability.available && availability.mode === "offline" && tab?.id !== undefined) {
+        offlinePlaybackOwner = { tabId: tab.id, windowId: tab.windowId };
+        state.userWantsPlayback = true;
+        await refreshSessionActivity();
+        await startAudio();
+      }
+      return { ...publicState(), ...(await offlineTunerAvailability()) };
+    }
     case "openOfflineTuner": {
       const tab = await getActiveTab();
-      if (isTunerEligibleTab(tab)) await startTuner(tab);
+      const availability = await offlineTunerAvailability();
+      if (availability.available && availability.mode === "offline" && isTunerEligibleTab(tab)) await startTuner(tab, { offline: true });
       return { ...publicState(), ...(await offlineTunerAvailability()) };
     }
     case "resumeOfflineTuner": {
@@ -695,8 +759,9 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
 
 browser.tabs.onActivated.addListener(() => { refreshSessionActivity().catch(console.error); });
 browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (changeInfo.status === "loading" && typeof changeInfo.url === "string" && !isSessionUrl(changeInfo.url) && !isNetworkErrorUrl(changeInfo.url)) {
+  if (typeof changeInfo.url === "string" && !isSessionUrl(changeInfo.url) && !isNetworkErrorUrl(changeInfo.url)) {
     offlineTunerAccessByTabId.delete(tabId);
+    if (offlinePlaybackOwner?.tabId === tabId) stopAudio({ clearIntent: true }).catch(console.error);
   }
   if (changeInfo.status === "loading") visibilityByTabId.delete(tabId);
   refreshOrStopForSessionTabs().catch(console.error);
@@ -704,6 +769,7 @@ browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
 browser.tabs.onRemoved.addListener((tabId) => {
   visibilityByTabId.delete(tabId);
   offlineTunerAccessByTabId.delete(tabId);
+  if (offlinePlaybackOwner?.tabId === tabId) stopAudio({ clearIntent: true }).catch(console.error);
   if (tunerOwner?.tabId === tabId) stopTuner({ returnToMetronome: true }).catch(console.error);
   // Exclude the closing ID even if tabs.query() briefly still returns it.
   refreshOrStopForSessionTabs(tabId).catch(console.error);
@@ -717,6 +783,7 @@ browser.windows.onFocusChanged.addListener(() => { refreshSessionActivity().catc
 browser.webRequest?.onBeforeRequest.addListener((details) => {
   if (details.type === "main_frame" && details.tabId >= 0) {
     offlineTunerAccessByTabId.set(details.tabId, Date.now() + OFFLINE_TUNER_ACCESS_MS);
+    browser.action?.enable(details.tabId).catch(console.error);
   }
 }, {
   urls: ["https://thesession.org/*", "https://www.thesession.org/*"],

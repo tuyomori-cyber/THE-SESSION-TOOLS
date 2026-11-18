@@ -11,6 +11,14 @@ const dot = document.querySelector("[data-dot]");
 const start = document.querySelector("[data-start]");
 const resume = document.querySelector("[data-resume]");
 const stop = document.querySelector("[data-stop]");
+const bpm = document.querySelector("[data-bpm]");
+const bpmInput = document.querySelector("[data-bpm-input]");
+const subdivision = document.querySelector("[data-subdivision]");
+const sound = document.querySelector("[data-sound]");
+const volume = document.querySelector("[data-volume]");
+const volumeInput = document.querySelector("[data-volume-input]");
+const play = document.querySelector("[data-play]");
+const stopAudio = document.querySelector("[data-stop-audio]");
 
 const labels = {
   idle: "待機中",
@@ -23,12 +31,25 @@ const labels = {
 };
 
 function render(state) {
+  if (state.mode === "online") {
+    window.close();
+    return;
+  }
   const allowed = state.available === true;
   const online = state.mode === "online";
   availability.textContent = allowed
-    ? (online ? "The Sessionで使用できます。" : "オフライン用チューナーを使用できます。")
+    ? (online ? "The Sessionで使用できます。" : "オフラインで使用できます。")
     : "The Sessionへの接続を試みたタブで開いてください。";
   availability.dataset.error = String(!allowed);
+  bpm.textContent = state.bpm;
+  bpmInput.value = state.bpm;
+  subdivision.value = String(state.subdivision);
+  sound.value = state.sound;
+  volumeInput.value = Math.round(state.volume * 100);
+  volume.textContent = `${volumeInput.value}%`;
+  play.disabled = !allowed || state.audioActuallyPlaying;
+  stopAudio.disabled = !state.userWantsPlayback;
+  for (const control of [bpmInput, subdivision, sound, volumeInput, document.querySelector("[data-bpm-down]"), document.querySelector("[data-bpm-up]"), document.querySelector("[data-reference-down]"), document.querySelector("[data-reference-up]")]) control.disabled = !allowed;
   status.textContent = labels[state.tunerStatus] ?? labels.idle;
   reference.textContent = `${state.tunerReferenceHz || 440} Hz`;
   const active = state.tunerStatus === "active";
@@ -69,7 +90,21 @@ async function refresh() {
 
 start.addEventListener("click", async () => { render(await browser.runtime.sendMessage({ type: "openOfflineTuner" })); });
 resume.addEventListener("click", async () => { render(await browser.runtime.sendMessage({ type: "resumeOfflineTuner" })); });
-stop.addEventListener("click", async () => { render(await browser.runtime.sendMessage({ type: "closeTuner" })); });
+stop.addEventListener("click", () => sendControl({ type: "closeTuner" }));
+async function sendControl(message) {
+  await browser.runtime.sendMessage(message);
+  await refresh();
+}
+play.addEventListener("click", () => sendControl({ type: "offlinePlay" }));
+stopAudio.addEventListener("click", () => sendControl({ type: "stop" }));
+document.querySelector("[data-bpm-down]").addEventListener("click", () => sendControl({ type: "adjustBpm", delta: -1 }));
+document.querySelector("[data-bpm-up]").addEventListener("click", () => sendControl({ type: "adjustBpm", delta: 1 }));
+bpmInput.addEventListener("input", () => sendControl({ type: "setBpm", bpm: Number(bpmInput.value) }));
+subdivision.addEventListener("change", () => sendControl({ type: "setSubdivision", subdivision: Number(subdivision.value) }));
+sound.addEventListener("change", () => sendControl({ type: "setSound", sound: sound.value }));
+volumeInput.addEventListener("input", () => sendControl({ type: "setVolume", volume: Number(volumeInput.value) / 100 }));
+document.querySelector("[data-reference-down]").addEventListener("click", () => sendControl({ type: "adjustTunerReference", delta: -1 }));
+document.querySelector("[data-reference-up]").addEventListener("click", () => sendControl({ type: "adjustTunerReference", delta: 1 }));
 
 refresh();
 window.setInterval(refresh, 250);

@@ -2,6 +2,7 @@
 
 const root = document.createElement("section");
 root.id = "the-session-tools-metronome";
+root.hidden = true;
 root.innerHTML = `
   <div class="tst-title">
     <span class="tst-drag-handle"><span aria-hidden="true">♩</span> <span data-panel-title>Metronome</span></span>
@@ -319,7 +320,12 @@ function reportVisibility() {
 }
 
 document.addEventListener("visibilitychange", reportVisibility);
-send({ type: "getState" });
+browser.runtime.sendMessage({ type: "onlinePageReady" }).then((state) => {
+  if (state) render(state);
+  root.hidden = false;
+}).catch((error) => {
+  console.error("THE SESSION TOOLS: オンライン画面の準備に失敗しました", error);
+});
 reportVisibility();
 
 // Firefox MV3 backgrounds are event pages. The verified content-script timer

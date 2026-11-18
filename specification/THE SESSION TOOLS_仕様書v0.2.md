@@ -23,6 +23,8 @@ The Session公式、汎用ABCツール、DAW、伴奏生成ツールを置き換
 
 背景スクリプトはcontent scriptから1秒ごとの無害なheartbeatを受け、Firefox MV3のevent pageが短時間で停止して音声が止まることを回避する。heartbeatの有効性はPoCで確認済みだが、Firefoxの将来の実装変更に対する恒久保証ではない。
 
+オフラインでは対象ホストへの遷移試行をタブごとに記録し、拡張ポップアップでメトロノームとチューナーを明示的に操作する。正常なThe Sessionページにcontent scriptが起動すると、同じタブのオフラインメトロノームを停止し、チューナーの停止応答またはHost切断を待ってから通常パネルを表示し、オフライン用アクションを無効化する。通常画面での再生・測定は再度明示的に開始する。接続復旧のみでは遷移を確定しない。
+
 ## 3. 機能
 
 - BPMは30〜300（既定110）。±ボタン、長押し連続調整、スライダーで変更する。
@@ -43,7 +45,7 @@ The Session公式、汎用ABCツール、DAW、伴奏生成ツールを置き換
 
 ## 6. 配布と検証
 
-配布ZIPは`extension/`直下から、`manifest.json`、`background.js`、`content.js`、`content.css`を直下に含めて作成する。
+配布ZIPは`extension/`直下から、`manifest.json`、`background.js`、`content.js`、`content.css`、`offline-tuner.html`、`offline-tuner.css`、`offline-tuner.js`を直下に含めて作成する。
 
 ```bash
 cd extension
@@ -51,6 +53,8 @@ zip ../the-session-tools-0.1.4.zip manifest.json background.js content.js conten
 ```
 
 2026-10-26にJavaScript構文検査、manifest JSON検査、ZIP構成を確認した。チューナー追加後のZIP生成・AMO検証、Surfaceでのタッチ操作、実演奏時の3音色評価、複数タブ・ウィンドウ、5分非アクティブ後の停止・自動再開は未完了である。実施事項は[TODO](../TODO.md)で管理する。
+
+2026-11-18に利用者がオフラインでのチューナー起動、メトロノーム起動・ポップアップ閉鎖後の再生継続、オンライン復帰後の停止と通常画面への切替を実機確認した。端末・Firefoxバージョン、マイク回収のプロセス等による直接確認は未記録である。
 
 ## 7. 履歴文書
 
