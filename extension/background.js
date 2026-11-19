@@ -541,6 +541,12 @@ function setInactivityTimer() {
   }, INACTIVITY_TIMEOUT_MS);
 }
 
+function hasActiveSessionWindow(windows) {
+  return windows.some((window) => window.focused && window.state !== "minimized" &&
+    window.tabs.some((tab) => tab.active && (isSessionUrl(tab.url) ||
+      (offlinePlaybackOwner?.tabId === tab.id && offlineTunerAccessByTabId.has(tab.id))) && visibilityByTabId.get(tab.id) !== false));
+}
+
 async function refreshSessionActivity() {
   const revision = ++activityRevision;
   const windows = await browser.windows.getAll({ populate: true, windowTypes: ["normal"] });
@@ -562,9 +568,7 @@ async function refreshSessionActivity() {
     if (ownerActive && state.tunerStatus === "busy") state.tunerStatus = "paused";
     await reconcileTuner();
   }
-  const isActive = windows.some((window) => window.focused && window.state !== "minimized" &&
-    window.tabs.some((tab) => tab.active && (isSessionUrl(tab.url) ||
-      (offlinePlaybackOwner?.tabId === tab.id && offlineTunerAccessByTabId.has(tab.id))) && visibilityByTabId.get(tab.id) !== false));
+  const isActive = hasActiveSessionWindow(windows);
   if (isActive === sessionIsActive) return;
   sessionIsActive = isActive;
   inactivityGeneration += 1;
@@ -667,6 +671,47 @@ async function refreshOrStopForSessionTabs(closingTabId) {
   // tab becomes about:neterror or another non-target URL.
   await refreshSessionActivity();
 }
+
+// Experimental, limited to the installed exchange-probe manager. This is not
+// a general-purpose external API or a voice-command interpreter.
+const EXPERIMENTAL_ASSISTANT_ID = "foxbook-exchange-manager@foxbook.example";
+const EXTERNAL_TEMPO_COMMAND = "tempo.increase.small";
+
+function hasExactMessageKeys(message, keys) {
+  const actual = Object.keys(message).sort();
+  const expected = [...keys].sort();
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
+}
+
+browser.runtime.onMessageExternal?.addListener((message, sender) => {
+  if (sender?.id !== EXPERIMENTAL_ASSISTANT_ID) return Promise.resolve({ ok: false, error: "UNAUTHORIZED" });
+  if (!message || typeof message !== "object" || Array.isArray(message) || message.version !== 1) {
+    return Promise.resolve({ ok: false, error: "INVALID_REQUEST" });
+  }
+  if (message.type === "getCommands" && hasExactMessageKeys(message, ["version", "type"])) {
+    return fetch(browser.runtime.getURL("voice-commands.json"))
+      .then((response) => { if (!response.ok) throw new Error("definition unavailable"); return response.json(); })
+      .then((definition) => ({ ok: true, definition }))
+      .catch(() => ({ ok: false, error: "DEFINITION_UNAVAILABLE" }));
+  }
+  if (message.type === "execute" && hasExactMessageKeys(message, ["version", "type", "commandId"]) &&
+      message.commandId === EXTERNAL_TEMPO_COMMAND) {
+    return (async () => {
+      try {
+        await initialize();
+        const windows = await browser.windows.getAll({ populate: true, windowTypes: ["normal"] });
+        if (!hasActiveSessionWindow(windows)) return { ok: false, error: "TARGET_INACTIVE" };
+        const before = state.bpm;
+        const updated = await adjustBpm(5);
+        return { ok: true, result: { bpm: updated.bpm, changed: updated.bpm !== before } };
+      } catch (error) {
+        console.error("THE SESSION TOOLS: 外部テンポ操作に失敗しました", error);
+        return { ok: false, error: "OPERATION_FAILED" };
+      }
+    })();
+  }
+  return Promise.resolve({ ok: false, error: "INVALID_REQUEST" });
+});
 
 browser.runtime.onMessage.addListener(async (message, sender) => {
   await initialize();

@@ -45,11 +45,11 @@ The Session公式、汎用ABCツール、DAW、伴奏生成ツールを置き換
 
 ## 6. 配布と検証
 
-配布ZIPは`extension/`直下から、`manifest.json`、`background.js`、`content.js`、`content.css`、`offline-tuner.html`、`offline-tuner.css`、`offline-tuner.js`を直下に含めて作成する。
+配布ZIPは`extension/`直下から、`manifest.json`、`background.js`、`content.js`、`content.css`、`offline-tuner.html`、`offline-tuner.css`、`offline-tuner.js`、`voice-commands.json`を直下に含めて作成する。
 
 ```bash
 cd extension
-zip ../the-session-tools-0.1.4.zip manifest.json background.js content.js content.css offline-tuner.html offline-tuner.css offline-tuner.js
+zip ../the-session-tools-0.1.4.zip manifest.json background.js content.js content.css offline-tuner.html offline-tuner.css offline-tuner.js voice-commands.json
 ```
 
 2026-10-26にJavaScript構文検査、manifest JSON検査、ZIP構成を確認した。チューナー追加後のZIP生成・AMO検証、Surfaceでのタッチ操作、実演奏時の3音色評価、複数タブ・ウィンドウ、5分非アクティブ後の停止・自動再開は未完了である。実施事項は[TODO](../TODO.md)で管理する。

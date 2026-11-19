@@ -114,7 +114,7 @@ systemctl --user restart foxbook-speech
 
 ```bash
 cd extension
-zip ../the-session-tools-0.1.4.zip manifest.json background.js content.js content.css offline-tuner.html offline-tuner.css offline-tuner.js
+zip ../the-session-tools-0.1.4.zip manifest.json background.js content.js content.css offline-tuner.html offline-tuner.css offline-tuner.js voice-commands.json
 ```
 
 作成した ZIP は、ディレクトリそのものではなく、直下に `manifest.json` がある構造でなければなりません。AMO Developer Hub へアップロードし、非公開配布なら **On your own (Unlisted)** を選択して署名済み XPI を取得します。
@@ -125,6 +125,7 @@ zip ../the-session-tools-0.1.4.zip manifest.json background.js content.js conten
 - `extension/content.js` — The Session へUIを追加し、入力をbackgroundへ送信
 - `extension/content.css` — メトロノームUIのスタイル
 - `extension/offline-tuner.*` — 接続エラー画面から使うメトロノームとチューナーのポップアップUI
+- `extension/voice-commands.json` — 実験用の音声操作APIが返すコマンド定義
 - `extension/background.js` — 再生状態、Web Audio API、タブ／ウィンドウのライフサイクルを管理
 - `extension/content.js` / `content.css` 内のTuner表示 — メトロノーム領域を置き換える音程メーターと基準ピッチ設定
 
