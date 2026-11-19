@@ -9,6 +9,7 @@ const SCHEDULE_AHEAD_SECONDS = 0.2;
 const DEFAULT_VOLUME = 0.7;
 const MAX_VOLUME = 1.5;
 const MIN_GAIN = 0.0001;
+const OFFLINE_TUNER_ACCESS_MS = 10 * 60 * 1000;
 const DEFAULT_SUBDIVISION = 1;
 const SUBDIVISIONS = [1, 2, 3, 4];
 const SOUND_PRESETS = {
@@ -37,6 +38,7 @@ const state = {
 let speechPort;
 let voiceRecordingId;
 let voiceStopTimer;
+let voiceCancelRequested = false;
 let tunerId;
 let tunerStartRequested = false;
 let tunerStopSent = false;
@@ -45,9 +47,28 @@ let tunerOwner;
 let tunerOwnerActive = false;
 let activityRevision = 0;
 let returnToMetronomeAfterTunerStop = false;
+let offlinePlaybackOwner;
+let offlineTunerReleaseTabId;
+const onlineHandoffs = new Map();
+const tunerReleaseWaiters = new Set();
 
-async function startTuner(tab) {
-  if (tab?.id !== undefined && tab.windowId !== undefined) tunerOwner = { tabId: tab.id, windowId: tab.windowId };
+function resolveTunerRelease() {
+  if (tunerId || tunerStartRequested || tunerStopSent) return;
+  if (!tunerWanted) offlineTunerReleaseTabId = undefined;
+  for (const resolve of tunerReleaseWaiters) resolve();
+  tunerReleaseWaiters.clear();
+}
+
+async function waitForTunerRelease() {
+  if (!tunerId && !tunerStartRequested && !tunerStopSent) return;
+  await new Promise((resolve) => tunerReleaseWaiters.add(resolve));
+}
+
+async function startTuner(tab, { offline = false } = {}) {
+  if (tab?.id !== undefined && tab.windowId !== undefined && isTunerEligibleTab(tab)) {
+    tunerOwner = { tabId: tab.id, windowId: tab.windowId, offline: offline || !isSessionUrl(tab.url) };
+    if (tunerOwner.offline) offlineTunerReleaseTabId = tab.id;
+  }
   if (!tunerOwner) {
     const windows = await browser.windows.getAll({ populate: true, windowTypes: ["normal"] });
     const focused = windows.find((window) => window.focused && window.state !== "minimized");
@@ -80,6 +101,7 @@ async function stopTuner({ returnToMetronome = false } = {}) {
   returnToMetronomeAfterTunerStop ||= returnToMetronome;
   if (returnToMetronome) state.panelMode = "metronome";
   await reconcileTuner();
+  resolveTunerRelease();
 }
 
 async function reconcileTuner() {
@@ -102,7 +124,7 @@ async function reconcileTuner() {
 
 async function resumeWakewordIfActive() {
   const windows = await browser.windows.getAll({ populate: true, windowTypes: ["normal"] });
-  if (tunerWanted || tunerId || tunerStartRequested || tunerStopSent || !speechPort) return;
+  if (tunerWanted || tunerId || tunerStartRequested || tunerStopSent || voiceCancelRequested || !speechPort) return;
   const active = windows.some((window) => window.focused && window.state !== "minimized" &&
     window.tabs.some((tab) => tab.active && isSessionUrl(tab.url) && visibilityByTabId.get(tab.id) !== false));
   if (active) {
@@ -125,10 +147,10 @@ function connectSpeech() {
       } else if (message.event === "microphone_prepared") {
         speechPort.postMessage({ version: 1, action: "prepare_engine", engine: "reazonspeech_k2" });
       } else if (message.event === "engine_prepared") {
-        if (sessionIsActive && !tunerWanted) speechPort.postMessage({ version: 1, action: "start_wakeword" });
-        else {
-          state.voiceStatus = "paused";
-          broadcastState().catch(console.error);
+        if (tunerStartRequested && tunerWanted && tunerOwnerActive) {
+          speechPort.postMessage({ version: 1, action: "stop_wakeword" });
+        } else {
+          resumeWakewordIfActive().catch(console.error);
         }
       } else if (message.event === "wakeword_waiting") {
         if (tunerStartRequested || !sessionIsActive) {
@@ -142,6 +164,7 @@ function connectSpeech() {
           speechPort.postMessage({ version: 1, action: "start_tuner" });
         } else {
           tunerStartRequested = false;
+          resolveTunerRelease();
           if (tunerWanted) reconcileTuner().catch(console.error);
           else {
             reconcileTuner().catch(console.error);
@@ -150,6 +173,7 @@ function connectSpeech() {
         }
       } else if (message.event === "wakeword_detected") {
         if (!sessionIsActive || tunerWanted) {
+          speechPort.postMessage({ version: 1, action: "stop_wakeword" });
           state.voiceStatus = "paused";
           broadcastState().catch(console.error);
           return;
@@ -160,10 +184,14 @@ function connectSpeech() {
       } else if (message.event === "started") {
         voiceRecordingId = message.recordingId;
         if (!sessionIsActive) {
-          speechPort.postMessage({ version: 1, action: "cancel_recording", recordingId: voiceRecordingId });
           voiceRecordingId = undefined;
+          voiceCancelRequested = true;
+          speechPort.postMessage({ version: 1, action: "cancel_recording", recordingId: message.recordingId });
+          state.voiceStatus = "paused";
+          broadcastState().catch(console.error);
           return;
         }
+        voiceCancelRequested = false;
         voiceStopTimer = setTimeout(() => {
           if (voiceRecordingId) speechPort?.postMessage({ version: 1, action: "stop_recording", recordingId: voiceRecordingId });
         }, 3000);
@@ -208,6 +236,12 @@ function connectSpeech() {
           else if (volume !== undefined) setVolume(volume / 100).catch(console.error);
         }
         if (!isTunerCommand) resumeWakewordIfActive().catch(console.error);
+      } else if (message.event === "cancelled") {
+        if (voiceStopTimer) clearTimeout(voiceStopTimer);
+        voiceStopTimer = undefined;
+        voiceRecordingId = undefined;
+        voiceCancelRequested = false;
+        resumeWakewordIfActive().catch(console.error);
       } else if (message.event === "tuner_started") {
         tunerStartRequested = false;
         tunerId = message.tunerId;
@@ -229,6 +263,7 @@ function connectSpeech() {
         tunerStartRequested = false;
         tunerStopSent = false;
         tunerId = undefined;
+        resolveTunerRelease();
         state.tunerStatus = tunerWanted ? "paused" : "idle";
         state.tunerFrequencyHz = null;
         if (returnToMetronomeAfterTunerStop) {
@@ -245,6 +280,7 @@ function connectSpeech() {
       } else if (message.event === "error") {
         const startingTuner = tunerStartRequested;
         tunerStartRequested = false;
+        resolveTunerRelease();
         if (message.code === "BUSY" && startingTuner && tunerWanted) {
           state.tunerStatus = "busy";
           state.voiceStatus = "paused";
@@ -267,9 +303,14 @@ function connectSpeech() {
     });
     speechPort.onDisconnect.addListener(() => {
       speechPort = undefined;
+      if (voiceStopTimer) clearTimeout(voiceStopTimer);
+      voiceStopTimer = undefined;
+      voiceRecordingId = undefined;
+      voiceCancelRequested = false;
       tunerStartRequested = false;
       tunerStopSent = false;
       tunerId = undefined;
+      resolveTunerRelease();
       state.tunerFrequencyHz = null;
       if (state.tunerStatus !== "idle") state.tunerStatus = "error";
       state.voiceStatus = "error";
@@ -292,6 +333,10 @@ let inactivityGeneration = 0;
 let inactivityTimer;
 let sessionIsActive = false;
 const visibilityByTabId = new Map();
+// A network error replaces the requested page with about:neterror, where a
+// content script cannot run. Keep the successful navigation attempt briefly
+// so the toolbar popup can still offer the tuner for that same tab.
+const offlineTunerAccessByTabId = new Map();
 
 function publicState() {
   return { ...state };
@@ -410,7 +455,7 @@ async function startAudio() {
   await initialize();
   if (state.audioActuallyPlaying) return;
   const sessionTabs = await getSessionTabs();
-  if (sessionTabs.length === 0) {
+  if (sessionTabs.length === 0 && !offlinePlaybackOwner) {
     state.userWantsPlayback = false;
     await broadcastState();
     return;
@@ -427,7 +472,10 @@ async function startAudio() {
 }
 
 async function stopAudio({ clearIntent = false } = {}) {
-  if (clearIntent) state.userWantsPlayback = false;
+  if (clearIntent) {
+    state.userWantsPlayback = false;
+    offlinePlaybackOwner = undefined;
+  }
   if (schedulerId) clearInterval(schedulerId);
   schedulerId = undefined;
   state.audioActuallyPlaying = false;
@@ -498,25 +546,34 @@ function setInactivityTimer() {
   }, INACTIVITY_TIMEOUT_MS);
 }
 
+function hasActiveSessionWindow(windows, excludingTabId) {
+  return windows.some((window) => window.focused && window.state !== "minimized" &&
+    window.tabs.some((tab) => tab.id !== excludingTabId && tab.active && (isSessionUrl(tab.url) ||
+      (offlinePlaybackOwner?.tabId === tab.id && offlineTunerAccessByTabId.has(tab.id))) && visibilityByTabId.get(tab.id) !== false));
+}
+
 async function refreshSessionActivity(excludingTabId) {
   const revision = ++activityRevision;
   const windows = await browser.windows.getAll({ populate: true, windowTypes: ["normal"] });
   if (revision !== activityRevision) return;
+  if (offlinePlaybackOwner && !windows.some((window) => window.id === offlinePlaybackOwner.windowId &&
+    window.tabs.some((tab) => tab.id === offlinePlaybackOwner.tabId))) {
+    await stopAudio({ clearIntent: true });
+  }
   const ownerWindow = tunerOwner && windows.find((window) => window.id === tunerOwner.windowId);
   const ownerTab = ownerWindow?.tabs.find((tab) => tab.id === tunerOwner.tabId && tab.id !== excludingTabId);
   const ownerActive = Boolean(ownerTab && ownerWindow.focused && ownerWindow.state !== "minimized" &&
-    ownerTab.active && isSessionUrl(ownerTab.url) && visibilityByTabId.get(ownerTab.id) !== false);
+    ownerTab.active && isTunerOwnerTabEligible(ownerTab) && visibilityByTabId.get(ownerTab.id) !== false);
   if (tunerWanted && !ownerTab) {
     await stopTuner({ returnToMetronome: true });
-  } else if (tunerWanted && ownerTab && !isSessionUrl(ownerTab.url)) {
+  } else if (tunerWanted && ownerTab && !isTunerOwnerTabEligible(ownerTab)) {
     await stopTuner({ returnToMetronome: true });
   } else if (tunerWanted && ownerActive !== tunerOwnerActive) {
     tunerOwnerActive = ownerActive;
     if (ownerActive && state.tunerStatus === "busy") state.tunerStatus = "paused";
     await reconcileTuner();
   }
-  const isActive = windows.some((window) => window.focused && window.state !== "minimized" &&
-    window.tabs.some((tab) => tab.id !== excludingTabId && tab.active && isSessionUrl(tab.url) && visibilityByTabId.get(tab.id) !== false));
+  const isActive = hasActiveSessionWindow(windows, excludingTabId);
   if (isActive === sessionIsActive) return;
   sessionIsActive = isActive;
   inactivityGeneration += 1;
@@ -524,22 +581,23 @@ async function refreshSessionActivity(excludingTabId) {
   inactivityTimer = undefined;
   if (sessionIsActive) {
     if (!tunerWanted && !tunerId && !tunerStartRequested && !tunerStopSent && state.voiceStatus === "paused" && speechPort) {
-      state.voiceStatus = "connected";
-      speechPort.postMessage({ version: 1, action: "start_wakeword" });
+      await resumeWakewordIfActive();
     }
     if (state.userWantsPlayback && !state.audioActuallyPlaying && state.autoResume) await startAudio();
   } else {
-    if (speechPort && !tunerWanted && !tunerId && !tunerStartRequested && !tunerStopSent) {
-      state.voiceStatus = "paused";
-      if (voiceStopTimer) clearTimeout(voiceStopTimer);
-      voiceStopTimer = undefined;
-      if (voiceRecordingId) {
-        speechPort.postMessage({ version: 1, action: "cancel_recording", recordingId: voiceRecordingId });
-        voiceRecordingId = undefined;
-      }
-      speechPort.postMessage({ version: 1, action: "stop_wakeword" });
-      await broadcastState();
+    if (voiceStopTimer) clearTimeout(voiceStopTimer);
+    voiceStopTimer = undefined;
+    if (voiceRecordingId && speechPort) {
+      const recordingId = voiceRecordingId;
+      voiceRecordingId = undefined;
+      voiceCancelRequested = true;
+      speechPort.postMessage({ version: 1, action: "cancel_recording", recordingId });
     }
+    if (!tunerWanted && !tunerId && !tunerStartRequested && !tunerStopSent && speechPort) {
+      speechPort.postMessage({ version: 1, action: "stop_wakeword" });
+    }
+    state.voiceStatus = "paused";
+    await broadcastState();
     setInactivityTimer();
   }
 }
@@ -553,6 +611,57 @@ function isSessionUrl(url = "") {
   }
 }
 
+function isNetworkErrorUrl(url = "") {
+  return String(url).startsWith("about:neterror");
+}
+
+function hasOfflineTunerAccess(tabId) {
+  const expiresAt = offlineTunerAccessByTabId.get(tabId);
+  if (expiresAt && (offlinePlaybackOwner?.tabId === tabId || (tunerWanted && tunerOwner?.offline && tunerOwner.tabId === tabId))) return true;
+  if (!expiresAt || expiresAt <= Date.now()) {
+    offlineTunerAccessByTabId.delete(tabId);
+    return false;
+  }
+  return true;
+}
+
+function isTunerEligibleTab(tab) {
+  return Boolean(tab && (isSessionUrl(tab.url) || hasOfflineTunerAccess(tab.id)));
+}
+
+function isTunerOwnerTabEligible(tab) {
+  return Boolean(tab && (isSessionUrl(tab.url) || (tunerOwner?.offline && offlineTunerAccessByTabId.has(tab.id))));
+}
+
+async function getActiveTab() {
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+  return tab;
+}
+
+async function offlineTunerAvailability() {
+  const tab = await getActiveTab();
+  if (onlineHandoffs.has(tab?.id)) return { available: false, mode: "online" };
+  if (isSessionUrl(tab?.url) && !hasOfflineTunerAccess(tab.id)) return { available: false, mode: "online" };
+  return { available: hasOfflineTunerAccess(tab?.id), mode: "offline" };
+}
+
+async function handoffOnlineTab(tab) {
+  if (!tab || !isSessionUrl(tab.url)) return;
+  if (onlineHandoffs.has(tab.id)) return onlineHandoffs.get(tab.id);
+  const handoff = (async () => {
+    offlineTunerAccessByTabId.delete(tab.id);
+    if (offlinePlaybackOwner?.tabId === tab.id) await stopAudio({ clearIntent: true });
+    if ((tunerOwner?.offline && tunerOwner.tabId === tab.id) || offlineTunerReleaseTabId === tab.id) {
+      if (tunerOwner?.offline && tunerOwner.tabId === tab.id) await stopTuner({ returnToMetronome: true });
+      await waitForTunerRelease();
+    }
+    if (browser.action) await browser.action.disable(tab.id).catch(console.error);
+    await refreshSessionActivity();
+  })();
+  onlineHandoffs.set(tab.id, handoff);
+  try { await handoff; } finally { onlineHandoffs.delete(tab.id); }
+}
+
 async function getSessionTabs({ excludingTabId } = {}) {
   const tabs = await browser.tabs.query({});
   return tabs.filter((tab) => tab.id !== excludingTabId && isSessionUrl(tab.url));
@@ -560,17 +669,89 @@ async function getSessionTabs({ excludingTabId } = {}) {
 
 async function refreshOrStopForSessionTabs(closingTabId) {
   const tabs = await getSessionTabs({ excludingTabId: closingTabId });
-  if (tabs.length === 0) {
+  if (tabs.length === 0 && !offlinePlaybackOwner) {
     await stopAudio({ clearIntent: true });
   }
   await refreshSessionActivity(closingTabId);
 }
+
+// Experimental, limited to the installed exchange-probe manager. This is not
+// a general-purpose external API or a voice-command interpreter.
+const EXPERIMENTAL_ASSISTANT_ID = "foxbook-exchange-manager@foxbook.example";
+const EXTERNAL_TEMPO_COMMAND = "tempo.increase.small";
+
+function hasExactMessageKeys(message, keys) {
+  const actual = Object.keys(message).sort();
+  const expected = [...keys].sort();
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
+}
+
+browser.runtime.onMessageExternal?.addListener((message, sender) => {
+  if (sender?.id !== EXPERIMENTAL_ASSISTANT_ID) return Promise.resolve({ ok: false, error: "UNAUTHORIZED" });
+  if (!message || typeof message !== "object" || Array.isArray(message) || message.version !== 1) {
+    return Promise.resolve({ ok: false, error: "INVALID_REQUEST" });
+  }
+  if (message.type === "getCommands" && hasExactMessageKeys(message, ["version", "type"])) {
+    return fetch(browser.runtime.getURL("voice-commands.json"))
+      .then((response) => { if (!response.ok) throw new Error("definition unavailable"); return response.json(); })
+      .then((definition) => ({ ok: true, definition }))
+      .catch(() => ({ ok: false, error: "DEFINITION_UNAVAILABLE" }));
+  }
+  if (message.type === "execute" && hasExactMessageKeys(message, ["version", "type", "commandId"]) &&
+      message.commandId === EXTERNAL_TEMPO_COMMAND) {
+    return (async () => {
+      try {
+        await initialize();
+        const windows = await browser.windows.getAll({ populate: true, windowTypes: ["normal"] });
+        if (!hasActiveSessionWindow(windows)) return { ok: false, error: "TARGET_INACTIVE" };
+        const before = state.bpm;
+        const updated = await adjustBpm(5);
+        return { ok: true, result: { bpm: updated.bpm, changed: updated.bpm !== before } };
+      } catch (error) {
+        console.error("THE SESSION TOOLS: 外部テンポ操作に失敗しました", error);
+        return { ok: false, error: "OPERATION_FAILED" };
+      }
+    })();
+  }
+  return Promise.resolve({ ok: false, error: "INVALID_REQUEST" });
+});
 
 browser.runtime.onMessage.addListener(async (message, sender) => {
   await initialize();
   switch (message?.type) {
     case "getState":
       return publicState();
+    case "getOfflineTunerState":
+      return { ...publicState(), ...(await offlineTunerAvailability()) };
+    case "onlinePageReady":
+      await handoffOnlineTab(sender.tab);
+      return publicState();
+    case "offlinePlay": {
+      const tab = await getActiveTab();
+      const availability = await offlineTunerAvailability();
+      if (availability.available && availability.mode === "offline" && tab?.id !== undefined) {
+        offlinePlaybackOwner = { tabId: tab.id, windowId: tab.windowId };
+        state.userWantsPlayback = true;
+        await refreshSessionActivity();
+        await startAudio();
+      }
+      return { ...publicState(), ...(await offlineTunerAvailability()) };
+    }
+    case "openOfflineTuner": {
+      const tab = await getActiveTab();
+      const availability = await offlineTunerAvailability();
+      if (availability.available && availability.mode === "offline" && isTunerEligibleTab(tab)) await startTuner(tab, { offline: true });
+      return { ...publicState(), ...(await offlineTunerAvailability()) };
+    }
+    case "resumeOfflineTuner": {
+      const tab = await getActiveTab();
+      if (tunerWanted && tab?.id === tunerOwner?.tabId && state.tunerStatus === "busy" && isTunerEligibleTab(tab)) {
+        state.tunerStatus = "paused";
+        await refreshSessionActivity();
+        await reconcileTuner();
+      }
+      return { ...publicState(), ...(await offlineTunerAvailability()) };
+    }
     case "setBpm":
       return setBpm(message.bpm);
     case "adjustBpm":
@@ -626,11 +807,17 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
 
 browser.tabs.onActivated.addListener(() => { refreshSessionActivity().catch(console.error); });
 browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (typeof changeInfo.url === "string" && !isSessionUrl(changeInfo.url) && !isNetworkErrorUrl(changeInfo.url)) {
+    offlineTunerAccessByTabId.delete(tabId);
+    if (offlinePlaybackOwner?.tabId === tabId) stopAudio({ clearIntent: true }).catch(console.error);
+  }
   if (changeInfo.status === "loading") visibilityByTabId.delete(tabId);
   refreshOrStopForSessionTabs().catch(console.error);
 });
 browser.tabs.onRemoved.addListener((tabId) => {
   visibilityByTabId.delete(tabId);
+  offlineTunerAccessByTabId.delete(tabId);
+  if (offlinePlaybackOwner?.tabId === tabId) stopAudio({ clearIntent: true }).catch(console.error);
   if (tunerOwner?.tabId === tabId) stopTuner({ returnToMetronome: true }).catch(console.error);
   // Exclude the closing ID even if tabs.query() briefly still returns it.
   refreshOrStopForSessionTabs(tabId).catch(console.error);
@@ -640,6 +827,16 @@ browser.windows.onRemoved.addListener(() => {
   refreshOrStopForSessionTabs().catch(console.error);
 });
 browser.windows.onFocusChanged.addListener(() => { refreshSessionActivity().catch(console.error); });
+
+browser.webRequest?.onBeforeRequest.addListener((details) => {
+  if (details.type === "main_frame" && details.tabId >= 0) {
+    offlineTunerAccessByTabId.set(details.tabId, Date.now() + OFFLINE_TUNER_ACCESS_MS);
+    browser.action?.enable(details.tabId).catch(console.error);
+  }
+}, {
+  urls: ["https://thesession.org/*", "https://www.thesession.org/*"],
+  types: ["main_frame"]
+});
 
 initialize().then(async () => {
   await refreshSessionActivity();

@@ -5,9 +5,10 @@ Updated: 1792999000
 Now:
 - Done: 旧仕様・検討・PoC記録をoldへ履歴化し、v0.1.3実装ベースの現行仕様v0.2を整備した。
 - Done: JavaScript構文、manifest JSON、配布ZIPの4ファイル構成を確認した。
+- Done: オフラインチューナー起動、メトロノーム再生継続、オンライン復帰後の画面切替を利用者が実機確認した。
 
 Next:
-- Surfaceでのタッチ・音声ライフサイクル実機確認、3音色の試聴、AMO検証を実施する。
+- オフライン時の設定項目と、タブ遷移・オンライン復帰時のマイク回収を直接確認する。
 
 Constraints:
 - Keep session.md short and optimized for Codex resumption.

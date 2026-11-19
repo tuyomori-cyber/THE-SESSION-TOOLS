@@ -15,6 +15,7 @@
   font-size: 14px;
   line-height: 1.3;
 }
+#the-session-tools-metronome[hidden] { display: none !important; }
 
 #the-session-tools-metronome .tst-title {
   display: flex;

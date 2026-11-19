@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "appId": "the_session_tools",
+  "name": "THE SESSION TOOLS",
+  "aliases": ["セッションツール"],
+  "commands": [
+    {
+      "id": "tempo.increase.small",
+      "label": "テンポを5上げる",
+      "phrases": ["テンポ少し上げて", "テンポを少し上げて", "テンポを少し上げてほしい"]
+    }
+  ]
+}
